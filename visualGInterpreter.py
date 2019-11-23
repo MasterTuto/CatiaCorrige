@@ -1,6 +1,29 @@
 import re
 
+implementacaoEscolhaCaso = """
+class escolha(object):
+    def __init__(self, valor):
+        self.valor = valor
+        self.terminou = False
+
+    def __iter__(self):
+        yield self.tentativa
+        raise StopIteration
+
+    def tentativa(self, *args):
+        if self.terminou or not args:
+            return True
+        elif self.valor in args:
+            self.terminou = True
+            return True
+        else:
+            return False
+"""
+
 class VisualGCode():
+	tempEscolhaCaso = []
+	poeBreak = False
+	jaPosImplementacao = False
 
 	def __init__(self, code):
 		self.code = code
@@ -18,16 +41,27 @@ class VisualGCode():
 			'lacoEnquanto': self.lacoEnquanto,
 			'lacoPara': self.lacoPara,
 			'escolhaCaso': self.escolhaCaso,
+			'caso': self.caso,
 			'escreva': self.escreva,
 			'leia': self.leia,
 			'repitaAte': self.repitaAte,
 			'facaEnquanto':self.facaEnquanto,
+			'fimse': self.fimse,
+			
+			'fimenquanto': lambda x: ('',-1),#self.fimenquanto,
+			'fimpara': lambda x: ('', -1),
+			'fimescolha': lambda x: ('', -2),
+			'outrocaso': lambda x: ('if (caso()):', 0),
+			'interrompa': lambda x: ('break', -1)
 		}
 
 	def processarTiposDasVariaveis(self, areaVariaveis):
 		for linha in areaVariaveis.split('\n'):
-			if linha == '': continue
-			nomes, tipo = linha.split(":")
+			linha = linha.strip()
+			if not re.match(r'((?:[\t ]*([\w\_,]+)+))*: *(inteiro|real|logico|caractere)', linha, re.IGNORECASE):
+				continue
+
+			nomes, tipo = linha.strip().split(":")
 
 			tipo = tipo.strip()
 			for variavel in nomes.split(","):
@@ -37,14 +71,15 @@ class VisualGCode():
 	def compreenderTipo(self, codigo):
 		tipos = {
 			'atribuicaoVariavel': r'(\w+) *<- *(.+)',
-			'selecaoSe': r'se \((((\w+) *([<>=]{1}[>=]?) *(["\']?[\w]+["\']?") *)+)\) entao',
-			'senao': r'senao',
-			'lacoEnquanto': r'enquanto \((((\w+) *([<>=]{1}[>=]?) *(\w+) *)+)\) faca',
-			'lacoPara': r'para +[a-zA-Z0-9]+ +de +[a-zA-Z0-9]+ +ate +[a-zA-Z0-9]+ *(passo +[a-zA-Z0-9]+)?',
-			'escolhaCaso': r'escolhaCaso',
+			'selecaoSe': r'se \(((([a-zA-Z0-9% ]+) *([<>=]{1}[>=]?) *(["\']?[a-zA-Z0-9]+["\']?) *)+)\) ent(?:a|ã)o',
+			'senao': r'sen(?:a|ã)o',
+			'lacoEnquanto': r'enquanto \(((( *\(? *?(\w+) *([<>=]{1}[>=]?) *(\w+) *\)? *)(e|ou)? *)+)\) fa(?:c|ç)a',
+			'lacoPara': r'para +([\w\_\(\)\*\+\-\/]+) +de +([\w\_\(\)\*\+\-\/]+) +ate +([\w\_\(\)\*\+\-\/]+) *(?:passo +([\w\_\(\)\*\+\-\/]+))? *fa(?:ç|c)a',
+			'escolhaCaso': r'[ \t]*escolha +[\w_]+',
+			'caso': r'[ \t]*caso +[\w_]+',
 			'escreva': r'[\w ]*escreva(l?)\(([\'"]?.+[\'"]?)\)',
 			'leia': r'[ \w]*leia\(( *[a-zA-Z0-9]+ *)\)',
-			'repitaAte': r'repitaAte',
+			'repitaAte': r'repitaAt(?:é|e)',
 			'facaEnquanto': r'facaEnquanto',
 
 			'fimse': r'fimse',
@@ -52,6 +87,10 @@ class VisualGCode():
 			'fimpara': r'fimpara',
 			'fimrepita': r'fimrepita',
 			'fimfaca': r'fimfaca',
+			'fimescolha': r'fimescolha',
+
+			'outrocaso': r'outrocaso',
+			'interrompa': r'interrompa'
 
 		}
 
@@ -69,20 +108,34 @@ class VisualGCode():
 		for linha in linhas:
 			linha = linha.strip()
 			tipo = self.compreenderTipo(linha)
-			print(linha)
 			if tipo in self.tipos:
-				print(tipo)
+				if self.poeBreak and (tipo == 'caso' or tipo == "outrocaso" or tipo == "fimescolha"):
+					codigo += tabs + "break\n"
+
+				if (tipo == "escolhaCaso" and not self.jaPosImplementacao):
+					codigo =  implementacaoEscolhaCaso + "\n" + codigo
+					jaPosImplementacao = True
+				
 				codigoConvertido, tab = self.tipos[tipo](linha)
 
-				codigo += tabs + codigoConvertido if tipo != 'senao' else tabs[:-1] + codigoConvertido
+				if tipo == 'senao':
+					codigo += tabs[:-2] + codigoConvertido
+				elif tipo == "caso" or tipo == "outrocaso":
+					codigo += tabs[:-2] + codigoConvertido
+					self.poeBreak = True
+				else:
+					codigo += tabs + codigoConvertido
 				
-				if (tab == 1):
-					tabs += '\t'
-				if (tab == -1):
-					tabs = tabs[:-1]
+				if (tab >= 1):
+					tabs += '  '*tab
+				if (tab <= -1):
+					tabs = tabs[:tab*2]
+
+
+
 			codigo += '\n'
 
-		self.codigo_em_visualg = codigo
+		self.codigo_em_python = codigo
 		return codigo
 
 
@@ -91,7 +144,7 @@ class VisualGCode():
 		return "{0} = {1}".format(nomeVariavel, valor), 0
 
 	def selecaoSe(self, codigo):
-		reg = r'se \((((\w+) *([<>=]{1}[>=]?) *(["\']?[\w]+["\']?") *)+)\) entao'
+		reg = r'se \(((([a-zA-Z0-9% ]+) *([<>=]{1}[>=]?) *(["\']?[a-zA-Z0-9]+["\']?) *)+)\) ent(?:a|ã)o'
 		primeiroValor, operador, segundoValor = re.match(reg, codigo).groups()[2:]
 		if (operador == '<>'):
 			operador = "!="
@@ -103,27 +156,67 @@ class VisualGCode():
 	def senao(self, codigo):
 		return 'else:', 0
 
+	def fimenquanto(self, codigo):
+		return '\n', -1
+	
 	def fimse(self, codigo):
 		return '\n', -1
 
 	def escreva(self, codigo):
 		reg = r'[ \t]*escreva(l?)\(([\'"]?.*[\'"]?)\)'
-		l, mensagem = re.match(reg, codigo).groups()
+		l, mensagem = re.match(reg, codigo, re.I).groups()
 
 		return ("print({0})".format(mensagem), 0) if l else ("print({0}, end='')".format(mensagem), 0)
 	
 
 	def lacoEnquanto(self, codigo):
-		pass
+		reg = r'enquanto \(((([\w]+) *([<>=]{1}[>=]?) *(["\']?[\w]+["\']?) *)+)\) faca'
+		primeiroValor, operador, segundoValor = re.match(reg, codigo).groups()[2:]
+		if (operador == '<>'):
+			operador = "!="
+		elif (operador == "="):
+			operador = "=="
+
+		return "while ({0} {1} {2}):".format(primeiroValor, operador, segundoValor), 1
+
+		def mostrarGrupos(abc):
+
+			return 'while' + abc.group(2) + ':'
+		
+		reg = r'(enquanto)([\W\d\w]+)(fa(?:c|ç)a)'
+		codigo = re.sub(reg, mostrarGrupos, codigo)
+		return codigo, 1
 
 	def lacoPara(self, codigo):
-		pass
+		print("teste")
+		def trocarPara(codigo):
+			passo = codigo.group(4)
+			if not passo: passo = 1
+
+			return 'for {0} in range({1}, {2}, {3}):'.format(codigo.group(1),
+															codigo.group(2),
+															codigo.group(3),
+															passo)
+
+		reg = r"para +([\w\_\(\)\*\+\-\/]+) +de +([\w\_\(\)\*\+\-\/]+) +ate +([\w\_\(\)\*\+\-\/]+) *(?:passo +([\w\_\(\)\*\+\-\/]+))? *fa(?:ç|c)a"
+
+		codigo = re.sub(reg, trocarPara, codigo)
+		return codigo, 1
+
+	def caso(self, codigo):
+		reg = r'[ \t]*caso +([\w_]+)'
+		valorVariavel = re.match(reg, codigo, re.IGNORECASE).group(1)
+		return "if caso({0}):".format(valorVariavel), 0
+
 
 	def escolhaCaso(self, codigo):
-		pass
+		reg = r'[ \t]*escolha +([\w_]+)'
+		nomeVariavel = re.match(reg, codigo, re.IGNORECASE).group(1)
+		self.tempEscolhaCaso.append(nomeVariavel)
+		return "for caso in escolha(" + nomeVariavel + "):", 2
+		
 
 	def leia(self, codigo):
-		print("===1230132")
 		reg = r'[ \w]*leia\(( *[a-zA-Z0-9]+ *)\)'
 		nomeVariavel = re.match(reg, codigo).groups()[0]
 		tipo = self.tiposDasVariaveis[nomeVariavel]
@@ -146,41 +239,25 @@ class VisualGCode():
 		pass
 
 
-codigo = """
-Algoritmo "semnome"
-// Descobrir maior
-// Descrição   : Descobre o maior numero
-// Autor(a)    : Breno Carvalho da Siva
-// Data atual  : 28/08/2019
-Var
-n1: inteiro
-n2: inteiro
+import os
+index = 0
+itens = os.listdir('.')
+for item in itens:
+	print("[%s] %s" % (index, item))
+	index += 1
 
-Inicio
-escreval("Insira seu nome: ")
-leia(n1)
-
-n2 <- 10
-
-se (n1 > n2) entao
-		escreval("Eh maior, porra!!")
+escolha_ = int(input("Escolha qual arquivo executar (digite o numero correspondente): "))
+arquivo = open(itens[escolha_], 'r')
+codigo = arquivo.read()
+arquivo.close()
 
 
-
-Fimalgoritmo"""
-print(codigo)
-print("===============================================")
 codigo_visualg = VisualGCode(codigo)
 codigo_visualg.converterPraPython()
-#print(codigo_visualg.codigo_em_visualg)
+#print(codigo_visualg.codigo_em_python)
 print("===============================================")
+print(codigo_visualg.codigo_em_python)
 print("===============================================")
-
-print(codigo_visualg.codigo_em_visualg)
-
-print("===============================================")
-print("===============================================")
-
 print("Saida do codigo: ")
-exec(codigo_visualg.codigo_em_visualg)
+exec(codigo_visualg.codigo_em_python)
 	
