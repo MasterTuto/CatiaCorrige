@@ -281,6 +281,7 @@ for i in range(numeroQuestoes):
     print("Questao %i" % i)
     questao = prova.obterQuestao(i)
     print("Descricao: " + questao.obterDescricao() + '\n') 
+    
 
             
 '''
