@@ -75,7 +75,7 @@ class BaseDeDados:
 
 
     def obterQuestoes(self):
-        query = "SELECT * FROM prova_questoes"
+        query = "SELECT * FROM prova_questoes ORDER BY id_questao"
         query = self.database.execute(query)
 
         return query.fetchall()
@@ -149,7 +149,7 @@ class Prova(BaseDeDados):
 
     def obterQuestao(self, indice):
         questoes = self.obterQuestoes()
-        return Questao(questoes[indice-1])
+        return Questao(questoes[indice])
 
 class Questao():
     def __init__(self, dados):
@@ -275,8 +275,12 @@ for aluno in alunos:
     print("Aluno: ", aluno)
     print("Nota: ", alunos[aluno].obterNotaAluno())
 
-print("Prova 1: ", prova.obterDescricaoDaQuestao(1))
-print("Prova 1: ", prova.obterDescricaoDaQuestao(2))
+print("===========================================")
+numeroQuestoes = len(prova.obterQuestoes())
+for i in range(numeroQuestoes):
+    print("Questao %i" % i)
+    questao = prova.obterQuestao(i)
+    print("Descricao: " + questao.obterDescricao() + '\n') 
 
             
 '''
