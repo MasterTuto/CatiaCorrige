@@ -20,12 +20,14 @@ class escolha(object):
             return False
 """
 
+
 class VisualGCode():
 	tempEscolhaCaso = []
 	poeBreak = False
 	jaPosImplementacao = False
 
 	def __init__(self, code):
+		print(code)
 		self.code = code
 		self.so_algoritmo = code.split("Inicio")[1] if "Inicio" in  code else code
 
@@ -44,8 +46,8 @@ class VisualGCode():
 			'caso': self.caso,
 			'escreva': self.escreva,
 			'leia': self.leia,
-			'repitaAte': self.repitaAte,
-			'facaEnquanto':self.facaEnquanto,
+			'repita': lambda x: ('while True:', 1),
+			'ate': self.ate,
 			'fimse': self.fimse,
 			
 			'fimenquanto': lambda x: ('',-1),#self.fimenquanto,
@@ -78,9 +80,9 @@ class VisualGCode():
 			'escolhaCaso': r'[ \t]*escolha +[\w_]+',
 			'caso': r'[ \t]*caso +[\w_]+',
 			'escreva': r'[\w ]*escreva(l?)\(([\'"]?.+[\'"]?)\)',
-			'leia': r'[ \w]*leia\(( *[a-zA-Z0-9]+ *)\)',
-			'repitaAte': r'repitaAt(?:é|e)',
-			'facaEnquanto': r'facaEnquanto',
+			'leia': r'[ \t]*leia\(( *[a-zA-Z0-9]+ *)\)',
+			'repita': r'[ \t]*repita',
+			'ate':r'[ \t]*at(?:é|e)[\t ]*\(?[\t ]*[\w\_\-]+(?:[\t ]*[<>=]{1}[>=]?[\t ]*[\w\_\-])?\)?',
 
 			'fimse': r'fimse',
 			'fimenquanto': r'fimenquanto',
@@ -116,6 +118,7 @@ class VisualGCode():
 					codigo =  implementacaoEscolhaCaso + "\n" + codigo
 					jaPosImplementacao = True
 				
+				print(tipo)
 				codigoConvertido, tab = self.tipos[tipo](linha)
 
 				if tipo == 'senao':
@@ -125,6 +128,9 @@ class VisualGCode():
 					self.poeBreak = True
 				else:
 					codigo += tabs + codigoConvertido
+				
+				if (tipo == 'ate'):
+					codigo += '\n' + tabs + '  ' + 'break'
 				
 				if (tab >= 1):
 					tabs += '  '*tab
@@ -144,14 +150,11 @@ class VisualGCode():
 		return "{0} = {1}".format(nomeVariavel, valor), 0
 
 	def selecaoSe(self, codigo):
-		reg = r'se \(((([a-zA-Z0-9% ]+) *([<>=]{1}[>=]?) *(["\']?[a-zA-Z0-9]+["\']?) *)+)\) ent(?:a|ã)o'
-		primeiroValor, operador, segundoValor = re.match(reg, codigo).groups()[2:]
-		if (operador == '<>'):
-			operador = "!="
-		elif (operador == "="):
-			operador = "=="
+		reg = r'se[\t ]*(\(?.+\)?)[ \t]*ent(?:ã|a)o'
+		condicao = re.match(reg, codigo, re.IGNORECASE).group(1)
+		condicao = self.__tratarCondicao(condicao)
+		return "if ({condicao}):".format(condicao = condicao), 1
 
-		return "if ({0} {1} {2}):".format(primeiroValor, operador, segundoValor), 1
 
 	def senao(self, codigo):
 		return 'else:', 0
@@ -170,25 +173,14 @@ class VisualGCode():
 	
 
 	def lacoEnquanto(self, codigo):
-		reg = r'enquanto \(((([\w]+) *([<>=]{1}[>=]?) *(["\']?[\w]+["\']?) *)+)\) faca'
-		primeiroValor, operador, segundoValor = re.match(reg, codigo).groups()[2:]
-		if (operador == '<>'):
-			operador = "!="
-		elif (operador == "="):
-			operador = "=="
 
-		return "while ({0} {1} {2}):".format(primeiroValor, operador, segundoValor), 1
-
-		def mostrarGrupos(abc):
-
-			return 'while' + abc.group(2) + ':'
-		
-		reg = r'(enquanto)([\W\d\w]+)(fa(?:c|ç)a)'
-		codigo = re.sub(reg, mostrarGrupos, codigo)
+		reg = r'enquanto[ \t]*(\(?.+\)?)[ \t]*fa(?:ç|c)a'
+		condicao = re.match(reg, codigo).group(1)
+		condicao = self.__tratarCondicao(condicao)
+		codigo = 'while ({condicao}):'.format(condicao = condicao)
 		return codigo, 1
 
 	def lacoPara(self, codigo):
-		print("teste")
 		def trocarPara(codigo):
 			passo = codigo.group(4)
 			if not passo: passo = 1
@@ -231,13 +223,32 @@ class VisualGCode():
 
 		return "{0} = {1}(input())".format(nomeVariavel, tipo), 0
 
+	def __tratarCondicao(self, condicao):
+		reg = r'([\t ]*)[^<>](MOD|<>|=|e|ou|n(?:ã|a)o)[^=]([\t ]*)'
+		todos = set(re.findall(reg, condicao))
+		for i in todos:
+			if i[1] == "MOD":
+				condicao = condicao.replace(i[0]+i[1]+i[2], i[0]+'%'+i[2])
+			elif i[1] == '=':
+				condicao = condicao.replace(i[0]+i[1]+i[2], i[0]+'=='+i[2])
+			elif i[1] == '<>':
+				condicao = condicao.replace(i[0]+i[1]+i[2], i[0]+'!='+i[2])
+			elif i[1] == 'e':
+				condicao = condicao.replace(i[0]+i[1]+i[2], i[0]+' and '+i[2])
+			elif i[1] == 'ou':
+				condicao = condicao.replace(i[0]+i[1]+i[2], i[0]+' or '+i[2])
+			elif i[1] == 'não' or i[1] == 'nao':
+				condicao = condicao.replace(i[0]+i[1]+i[2], i[0]+' not '+i[2])
+		return condicao
 
-	def repitaAte(self, codigo):
-		pass
 
-	def facaEnquanto(self, codigo):
-		pass
+	def ate(self, codigo):
+		reg = r'[ \t]*at(?:é|e)[\t ]*(\(?.+\)?)'
+		condicao = re.match(reg, codigo, re.IGNORECASE).group(1)
+		condicao = self.__tratarCondicao(condicao)
 
+		codigoConvertido = "if ({condicao}):".format(condicao = condicao)
+		return codigoConvertido, -1
 
 import os
 index = 0
