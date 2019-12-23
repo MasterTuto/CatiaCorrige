@@ -9,15 +9,56 @@ class BaseDeDados:
         self.conexao = sqlite3.connect(caminho + '\\' + nome + '.bd')
         self.database = self.conexao.cursor()
 
+    def jaExisteProva(self):
+        try:
+            self.database.execute("SELECT * FROM prova_questoes")
+            return True
+        except sqlite3.OperationalError:
+            return False
 
     def criarTabelaProva(self):
         query = """CREATE TABLE IF NOT EXISTS prova_questoes (
             id_questao INTEGER AUTO INCREMENT PRIMARY KEY,
-            descricao  TEXT NOT NULL,
-            valor      REAL NOT NULL
-        );"""
-        
+            descricao  TEXT,
+            valor      REAL
+        );"""        
         self.database.execute(query)
+        self.conexao.commit()
+
+        query = """CREATE TABLE IF NOT EXISTS criterios (
+            id_criterio INTEGER AUTO INCREMENT PRIMARY KEY
+            id_questao  INTEGER,
+            descricao   TEXT,
+            peso       REAL
+        );"""        
+        self.database.execute(query)
+        self.conexao.commit()
+
+    def adicionarCriterio(self, questao):
+        query = "INSERT INTO criterios (id_questao, descricao, peso) VALUES ({0}, {1}, {2})".format(questao,
+                                                                                                    descricao,
+                                                                                                    peso)
+        self.database.execute(query)
+        self.conexao.commit()
+
+    def obterCriteriosDeQuestao(self, questao):
+        query = "SELECT * FROM criterios WHERE id_questao='{0}'".format(id_questao)
+        execucao = self.database.execute(query)
+        
+        return execucao.fetchall()
+
+    def editarCriteriosDaQuestao(self, criterio, peso=-1, descricao=''):
+        query = "UPDATE criterios SET "
+        if (peso != -1):
+            query += "peso={0}".format(peso)
+
+        if(descricao!=''):
+            query += "descricao='{0}'".format(peso)            
+
+        if (query == "UPDATE criterios SET "):
+            return False
+        
+
 
     def criarTabelaAluno(self):
         query = """CREATE TABLE IF NOT EXISTS {0}  (
@@ -28,6 +69,7 @@ class BaseDeDados:
             matricula TEXT NOT NULL);
         """.format(self.nome)
         self.database.execute(query)
+        self.conexao.commit()
 
         query = """CREATE TABLE IF NOT EXISTS notas (
             id_nota INTEGER AUTO INCREMENT PRIMARY KEY,
@@ -39,36 +81,39 @@ class BaseDeDados:
             
         );""".format(self.nome)
         self.database.execute(query)
+        self.conexao.commit()
 
     def cadastrarAluno(self):
         query = "INSERT INTO {0} (nome_completo, matricula) VALUES ('{0}', '{1}');" .format(
             self.nome, self.matricula)
         
         self.database.execute(query)
+        self.conexao.commit()
         return self.database.lastrowid
 
     def adicionarNota(self, nota, questao):
         self.database.execute("INSERT INTO notas SET questao={0}, nota={1}, id_aluno={2};".format(questao, nota, 1) )
+        self.conexao.commit()
         return self.database.lastrowid
 
     def editarNota(self, nota, questao):
         query = "UPDATE notas SET nota = %s WHERE questao=%s" % (nota, questao)
 
         self.database.execute(query)
+        self.conexao.commit()
 
     def obterDescricaoDaQuestao(self, questao):
         dados = (questao,)
         query = "SELECT descricao FROM prova_questoes WHERE id_questao = ?"
         query = self.database.execute(query, dados).fetchall()
+        self.conexao.commit()
         return query[0][0]
 
     def cadastrarQuestaoProva(self, descricao, valor):
         query = "INSERT INTO prova_questoes (descricao, valor) VALUES ('%s', %f);" % (descricao, valor)
 
-        #query = "INSERT INTO prova_questoes SET descricao = '%s', valor=%d" % (descricao, valor)
-        print(query)
-
         self.database.execute(query)
+        self.conexao.commit()
 
     def fecharConexao(self):
         self.conexao.close()
@@ -77,12 +122,14 @@ class BaseDeDados:
     def obterQuestoes(self):
         query = "SELECT * FROM prova_questoes ORDER BY id_questao"
         query = self.database.execute(query)
+        self.conexao.commit()
 
         return query.fetchall()
 
     def apagarProva(self):
         query = "DROP TABLE prova_questoes"
         self.database.execute(query)
+        self.conexao.commit()
 
     def editarQuestao(self, descricao='', valor=-1):
         query = "UPDATE prova_questoes SET "
@@ -97,49 +144,61 @@ class BaseDeDados:
         query += ';'
 
         self.database.execute(query)
+        self.conexao.commit()
 
     def apagarQuestao(self, questao_id):
         query = "DELETE FROM prova_questoes WHERE id_questao = %s;" % (questao_id)
 
         self.database.execute(query)
+        self.conexao.commit()
+
+
 
     def obterValorProva(self):
         query = "SELECT SUM(valor) FROM prova_questoes;"
         query = self.database.execute(query).fetchall()
+        self.conexao.commit()
         return query[0][0]
 
     def obterNota(self, questao):
         query = "SELECT nota FROM notas WHERE questao = %d;" % (questao)
         query = self.database.execute(query).fetchall()
+        self.conexao.commit()
         return query[0][0]
 
     def obterNotaAluno(self):
         query = "SELECT SUM(nota) FROM notas;"
         query = self.database.execute(query).fetchall()
+        self.conexao.commit()
         return query[0][0]
 
     def obterNotas(self):
         query = "SELECT nota FROM notas;"
         query = self.database.execute(query).fetchall()
+        self.conexao.commit()
         return query
 
     def registrarNota(self, questao, nota):
         query = "INSERT INTO notas (questao, nota, id_aluno) VALUES (%d, %f, %d);" % (questao, nota, 1)
         self.database.execute(query)
+        self.conexao.commit()
 
     def obterMatricula(self):
         query = "SELECT matricula FROM {};".format(self.nome)
         query = self.database.execute(query).fetchall()
+        self.conexao.commit()
         matricula = query[0][0]
         return matricula
 
     def mudarMatricula(self, matricula):
         query = "UPDATE {0} SET matricula = {1};".format(self.nome, matricula)
         self.database.execute(query)
+        self.conexao.commit()
 
     def mudarNome(self, novo_nome):
         query = "UPDATE {} SET nome_completo = '{1}';".format(self.nome, novo_nome)
         self.database.execute(query)
+        self.conexao.commit()
 
 class Prova(BaseDeDados):
     numeroDeQuestoes = 0
@@ -183,6 +242,7 @@ class pastaProjetos(object):
             if (it_matches):
                 nome_aluno, semestre, n_matricula = it_matches.groups()
                 caminho = path + '\\' + pasta
+                if not caminho.endswith('\\'): caminho+= '\\'
                 
                 self.projetos[nome_aluno] = Aluno({
                     'Nome': nome_aluno,
@@ -194,12 +254,7 @@ class pastaProjetos(object):
 
 
     def listarProjetos(self):
-        for aluno in self.projetos:
-            print(aluno,
-                  'Matricula: '+self.projetos[aluno].obterMatricula(),
-                  'Respostas: ',self.projetos[aluno].obterRespostas(),
-                  sep='\n\n')
-        return True
+        return self.projetos
 
     def obterAlunos(self):
         return self.projetos
@@ -231,95 +286,57 @@ class Aluno(BaseDeDados):
     def obterRespostas(self):
         return self.respostas
 
-caminho = "C:\\Users\\breno\\Documents\\TESTESAp1\\"#input("Digite o caminho das pastas: ")   
-obj = pastaProjetos(caminho)
-prova = Prova(caminho)
-prova.criarTabelaProva()
+    def obterCaminho(self):
+        return self.caminho
 
-n_questoes = int(input("Digite o numero de questoes da prova: "))
+if __name__ == "__main__":
+    caminho = "C:\\Users\\breno\\Documents\\TESTESAp1\\"#input("Digite o caminho das pastas: ")   
+    obj = pastaProjetos(caminho)
+    prova = Prova(caminho)
+    prova.criarTabelaProva()
 
-for i in range(n_questoes):
-    print("Digite a descrição da questão, entre 'ACABAR' para parar de digitar.\n")
-    descricao = ''
-    c = input("")
-    while(c != 'ACABAR'):
-        descricao += c
+    n_questoes = int(input("Digite o numero de questoes da prova: "))
+
+    for i in range(n_questoes):
+        print("Digite a descrição da questão, entre 'ACABAR' para parar de digitar.\n")
+        descricao = ''
         c = input("")
+        while(c != 'ACABAR'):
+            descricao += c
+            c = input("")
 
-    valor = float(input("Digite o valor da questao: "))
-    prova.cadastrarQuestaoProva(descricao, valor)
+        valor = float(input("Digite o valor da questao: "))
+        prova.cadastrarQuestaoProva(descricao, valor)
 
-print("===========\nA PROVA VALE %s\n===============" % prova.obterValorProva())
-
-
-alunos = obj.obterAlunos()
-for aluno in alunos:
-    print("========================")
-    print("ALUNO: " + aluno)
-    
-    n = n_questoes
-    indiceProva = 1
-    alunos[aluno].criarTabelaAluno()
-    alunos[aluno].cadastrarAluno()
-    while (n > 0):
-        nota = float(input("Digite a nota da %sª prova: " % indiceProva))
-        n-=1
-
-        alunos[aluno].registrarNota(indiceProva, nota)
-        indiceProva += 1
-
-print("===================", "Testando Resultados!!", "=========================", sep='\n')
-
-for aluno in alunos:
-    print("===========================")
-    print("Aluno: ", aluno)
-    print("Nota: ", alunos[aluno].obterNotaAluno())
-
-print("===========================================")
-numeroQuestoes = len(prova.obterQuestoes())
-for i in range(numeroQuestoes):
-    print("Questao %i" % i)
-    questao = prova.obterQuestao(i)
-    print("Descricao: " + questao.obterDescricao() + '\n') 
-    
-
-            
-'''
-caminho = "C:\\Users\\breno\\Documents\\TESTESAp1\\"#input("Digite o caminho das pastas: ")
-obj = pastaProjetos(caminho)
-aluno1 = obj.obterDadosAluno('JoaoCarvalho')
-aluno1.criarTabelaAluno()
-aluno1.cadastrarAluno(201911648, '20191')
-
-prova = Prova(caminho)
-prova.criarTabelaProva()
-prova.cadastrarQuestaoProva("Recebe um inteiro", 3.5)
-
-aluno1.registrarNota(1, 3.0)
-
-print("=========================")
-print(aluno1.obterNota(1))
-print(prova.obterQuestoes())
-#prova.apagarProva()
-prova.cadastrarQuestaoProva(descricao="Cadastre meu nome", valor=2.5)
-
-print(prova.obterQuestoes())
-print(prova.obterValorProva())
-aluno1.registrarNota(2, 1.5)
-
-print(aluno1.obterNotas())
-print(aluno1.obterNotaAluno())
-
-print("===== Aluno 2 =====")
-print(obj.obterAlunos())
-aluno2 = obj.obterDadosAluno('BrenoCarvalhoDaSilva')
-aluno2.criarTabelaAluno()
-aluno2.cadastrarAluno(1512, 20191)
-aluno2.registrarNota(1, 3.5)
-aluno2.registrarNota(2, 2.5)
-print(aluno2.obterNota(1))
-print(aluno2.obterNotas())
-print(aluno2.obterNotaAluno())
+    print("===========\nA PROVA VALE %s\n===============" % prova.obterValorProva())
 
 
-'''
+    alunos = obj.obterAlunos()
+    for aluno in alunos:
+        print("========================")
+        print("ALUNO: " + aluno)
+        
+        n = n_questoes
+        indiceProva = 1
+        alunos[aluno].criarTabelaAluno()
+        alunos[aluno].cadastrarAluno()
+        while (n > 0):
+            nota = float(input("Digite a nota da %sª prova: " % indiceProva))
+            n-=1
+
+            alunos[aluno].registrarNota(indiceProva, nota)
+            indiceProva += 1
+
+    print("===================", "Testando Resultados!!", "=========================", sep='\n')
+
+    for aluno in alunos:
+        print("===========================")
+        print("Aluno: ", aluno)
+        print("Nota: ", alunos[aluno].obterNotaAluno())
+
+    print("===========================================")
+    numeroQuestoes = len(prova.obterQuestoes())
+    for i in range(numeroQuestoes):
+        print("Questao %i" % i)
+        questao = prova.obterQuestao(i)
+        print("Descricao: " + questao.obterDescricao() + '\n') 

@@ -250,25 +250,30 @@ class VisualGCode():
 		codigoConvertido = "if ({condicao}):".format(condicao = condicao)
 		return codigoConvertido, -1
 
-import os
-index = 0
-itens = os.listdir('.')
-for item in itens:
-	print("[%s] %s" % (index, item))
-	index += 1
+def main():
 
-escolha_ = int(input("Escolha qual arquivo executar (digite o numero correspondente): "))
-arquivo = open(itens[escolha_], 'r')
-codigo = arquivo.read()
-arquivo.close()
+	import os
+	index = 0
+	itens = os.listdir('.')
+	for item in itens:
+		print("[%s] %s" % (index, item))
+		index += 1
+
+	escolha_ = int(input("Escolha qual arquivo executar (digite o numero correspondente): "))
+	arquivo = open(itens[escolha_], 'r')
+	codigo = arquivo.read()
+	arquivo.close()
 
 
-codigo_visualg = VisualGCode(codigo)
-codigo_visualg.converterPraPython()
-#print(codigo_visualg.codigo_em_python)
-print("===============================================")
-print(codigo_visualg.codigo_em_python)
-print("===============================================")
-print("Saida do codigo: ")
-exec(codigo_visualg.codigo_em_python)
-	
+	codigo_visualg = VisualGCode(codigo)
+	codigo_visualg.converterPraPython()
+	#print(codigo_visualg.codigo_em_python)
+	print("===============================================")
+	print(codigo_visualg.codigo_em_python)
+	print("===============================================")
+	print("Saida do codigo: ")
+	exec(codigo_visualg.codigo_em_python)
+
+
+if __name__ == '__main__':
+	main()
