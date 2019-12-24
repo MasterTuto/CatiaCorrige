@@ -354,14 +354,14 @@ class meuPrograma(wx.Frame):
 	def carregarQuestoesDoAluno(self, idAluno):
 		nomeAluno = self.treeCtrlAlunos.GetItemText(idAluno)
 		respostas = self.projetos[nomeAluno].obterRespostas()
-		for resposta in resposta:
+		for resposta in respostas:
 			if not resposta.endswith(".bd"):
 				numero = int(re.match(resposta, r".+([0-9]).+").group(1))
 				questao = self.prova.obterQuestao(numero-1)
 
 				painelGenerico = painelGenericoQuestao(
 					parent=self.notebookGerado,
-					descricao = questao.obterDescricao(),
+					descricao = questao.obterEnunciado(),
 					valor = questao.obterValor(),
 					codigo = self.projetos[nomeAluno].obterCaminho() + resposta
 					)
@@ -372,7 +372,7 @@ class meuPrograma(wx.Frame):
 
 	def abrirPastaDaProva(self, event):
 		self.pastaProjeto = wx.DirSelector()
-		self.projetos = backend.pastaProjetos(self.pastaProjeto)
+		self.projetos = backend.PastaProjetos(self.pastaProjeto)
 
 		self.prova = backend.Prova(self.pastaProjeto)
 		if not (self.prova.jaExisteProva()):
