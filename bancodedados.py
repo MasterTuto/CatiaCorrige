@@ -8,7 +8,7 @@ class BD_CRUD:
     def create(self, tabela, valores):
         pass
 
-    def read(self, tabela, itens_para_buscar, chaves):
+    def read(self, tabela, itens_para_buscar="*", chaves=False):
         pass
 
     def readMany(self):
@@ -24,63 +24,90 @@ class BD_CRUD:
         pass
 
 def Prova(BD_CRUD):
+    CDG_OK = 1
+    CDG_JA_EXISTE_NUMERO = 2
     def __init__(self):
-        pass
+        self.questoes = {}
 
-    def criarQuestaoEmBranco(self):
-        pass
+    def criarQuestaoEmBranco(self, numero_questao):
+        questao = Questao(numero_questao)
+        codigo = questao.cadastrarQuestaoEmBranco()
+        if codigo = self.CDG_OK:
+            self.questoes[numero_questao] = questao
+            return questao
+        elif codigo = self.CDG_JA_EXISTE_NUMERO:
+            del questao
+            return -1
+        
 
     def obterQuestao(self):
-        pass
+        return self.questoes[numero_questao]
 
     def obterQuestoes(self):
-        pass
+        return self.questoes
 
     def __bool__(self): # Substitui "ja existe prova"
-        if CONDICAO:
+        try:
+            self.read('prova_questoes', '*', False)
             return True
-        else:
+        except sqlite3.OperationalError:
             return False
 
     def __iter__(self): # Para percorrer as questoes
         pass
 
 def Questao(BD_CRUD):
-    def __init__(self):
+    def __init__(self, numero_questao, valor_questao=0, enunciado=''):
+        self.numero_questao = numero_questao
+        self.valor_questao = valor_questao
+        self.enunciado = enunciado
 
     def __hash__(self):
-        pass
+        return hash((self.numero_questao, self.valor_questao, self.enunciado))
 
-    def __eq__(self):
-        pass
+    def __eq__(self, outro):
+        if isinstance(outro, Questao):
+            dados_self = (self.numero_questao, self.valor_questao, self.enunciado)
+            dados_outro = (outro.numero_questao, outro.valor_questao, outro.enunciado)
+            if (dados_self == dados_outro)
+                return True
+        
+        return False
 
-    def __ne__(self):
-        pass
+    def __ne__(self, outro):
+        return not(self == outro)
 
+    def cadastrarQuestaoEmBranco(self):
+        self.create('tbl_prova', {'numero_questao':self.numero_questao})
+    
     def obterValor(self):
         return self.valor_questao
 
     def editarValor(self, novo_valor_questao):
-        self.valor_questao = novo_valor_questao
-        
         deu_certo = self.update('tbl_prova',
             {'valor_questao': novo_valor_questao},
             {'numero_questao': self.numero_questao})
-        
-        return True if deu_certo else False
+
+        if deu_certo:
+            self.valor_questao = novo_valor_questao
+            return True
+        else:
+            return False
 
 
     def obterEnunciado(self):
         return self.enunciado
 
-    def editarEnunciado(self, novo_enunciado):
-        self.enunciado = novo_enunciado
-        
+    def editarEnunciado(self, novo_enunciado):        
         deu_certo = self.update('tbl_prova',
             {'enunciado':novo_enunciado},
             {'numero_questao': self.numero_questao})
-        
-        return True if deu_certo else False
+
+        if deu_certo:
+            self.enunciado = novo_enunciado
+            return True
+        else:
+            return False
 
     def obterCriterio(self, id_criterio):
         criterio = self.read('tbl_criterios', '*', {'id_criterio': id_criterio})
@@ -93,18 +120,33 @@ def Questao(BD_CRUD):
             return False
 
     def obterCriterios(self):
-        return self.read('tbl_criterios', '*', False)
+        criterios =  self.read('tbl_criterios', '*', False, sort_by='nome_criterio')
+        criterios_ = []
+        for criterio in criterios:
+            criterios_.append(Criterio(
+                id_criterio=criterio['id_criterio'],
+                nome_criterio=criterio['nome_criterio'],
+                peso_criterio=criterio['peso_criterio']))
+        return criterios_
 
     def cadastrarCriterio(self):
         criterio_criado = Criterio(self)
-        criterio_criado = 
+        criterio_criado.criarCriterioEmBranco()
         return criterio_criado
 
-    def obterNumeroQuestao(self):
-        pass
+    def obterNumeroDaQuestao(self):
+        return self.numero_questao
 
-    def editarNumeroQuestao(self):
-        pass
+    def editarNumeroQuestao(self, novo_numero_questao):
+        deu_certo = self.update('tbl_prova',
+            novo_valor={'numero_questao': novo_numero_questao},
+            chaves={'numero_questao': self.numero_questao})
+
+        if deu_certo:
+            self.numero_questao = novo_numero_questao
+            return True
+        else:
+            return False
 
 
 def Criterio(BD_CRUD):
@@ -119,10 +161,9 @@ def Criterio(BD_CRUD):
         return hash((self.questao, self.id_criterio, self.nome_criterio, self.peso_criterio))
 
     def __eq__(self, outro):
-        dados_self = (self.questao, self.id_criterio, self.nome_criterio, self.peso_criterio)
-        dados_outro = (outro.questao, outro.id_criterio, outro.nome_criterio, outro.peso_criterio)
-        
         if isinstance(outro, Criterio) and dados_self == dados_outro:
+            dados_self = (self.questao, self.id_criterio, self.nome_criterio, self.peso_criterio)
+            dados_outro = (outro.questao, outro.id_criterio, outro.nome_criterio, outro.peso_criterio)
             return True
         else:
             return False
@@ -146,19 +187,29 @@ def Criterio(BD_CRUD):
         return self.nome_criterio
 
     def editarNomeCriterio(self, novo_nome_criterio):
-        self.nome_criterio = novo_nome_criterio
-        self.update('tbl_criterios',
+        deu_certo = self.update('tbl_criterios',
             {'nome_criterio': novo_nome_criterio},
             {'id_criterio':self.id_criterio})
+
+        if deu_certo:
+            self.nome_criterio = novo_nome_criterio
+            return True
+        else:
+            return False
 
     def obterPesoCriterio(self):
         return self.peso_criterio
 
     def editarPesoCriterio(self, novo_peso_criterio):
-        self.peso_criterio = novo_peso_criterio
-        self.update('tbl_criterios',
+        deu_certo = self.update('tbl_criterios',
             {'peso_criterio': novo_peso_criterio},
             {'id_criterio': self.id_criterio})
+
+        if deu_certo:
+            self.peso_criterio = novo_peso_criterio
+            return True
+        else:
+            return False
 
 def Aluno(BD_CRUD):
     '''
@@ -191,19 +242,25 @@ def Aluno(BD_CRUD):
         return self.matricula if self.matricula else 'Não cadastrada'
 
     def editarMatricula(self, nova_matricula):
-        self.matricula = nova_matricula
         deu_certo = self.update('tbl_alunos', {'matricula': nova_matricula}, {'id_aluno': self.id_aluno})
-        
-        return True if deu_certo else False
 
+        if deu_certo:
+            self.matricula = nova_matricula
+            return True
+        else:
+            return False
+        
     def obterNome(self):
         return self.nome
 
     def editarNome(self, novo_nome):
-        self.nome = novo_nome
         deu_certo = self.update('tbl_alunos', {'nome': novo_nome}, {'id_aluno': self.id_aluno})
-        
-        return True if deu_certo else False
+
+        if deu_certo:
+            self.nome = novo_nome
+            return True
+        else:
+            return False
 
     def obterRespostas(self):
         return self.respostas
@@ -264,11 +321,11 @@ def Resposta(BD_CRUD):
         return self.nota
 
     def editarNota(self, nova_nota):
-        self.nota = nova_nota
         deu_certo = self.update('tbl_notas',
             {'nota': nova_nota},
             {'criterio': self.criterio, 'questao': self.questao, 'aluno': self.aluno.obterIdAluno()})
         if deu_certo:
+            self.nota = nova_nota
             return True
         else:
             return False
@@ -277,12 +334,15 @@ def Resposta(BD_CRUD):
         return self.codigo
 
     def editarCodigo(self, novo_codigo):
-        self.codigo = novo_codigo
         deu_certo = self.update('tbl_notas',
             {'codigo': novo_codigo},
             {'criterio': self.criterio, 'questao': self.questao, 'aluno': self.aluno.obterIdAluno()})
 
-        return True if deu_certo else False
+        if deu_certo:
+            self.codigo = novo_codigo
+            return True
+        else:
+            return False
 
 
 class PastaProjetos:

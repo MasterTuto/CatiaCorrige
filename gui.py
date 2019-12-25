@@ -375,7 +375,7 @@ class meuPrograma(wx.Frame):
 		self.projetos = backend.PastaProjetos(self.pastaProjeto)
 
 		self.prova = backend.Prova(self.pastaProjeto)
-		if not (self.prova.jaExisteProva()):
+		if not self.prova:#(self.prova.jaExisteProva()):
 			wx.MessageBox("Não existe prova cadastrada, clique OK para criar",
 				parent=self,
 				style=wx.ICON_EXCLAMATION | wx.OK)
