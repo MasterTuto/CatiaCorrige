@@ -1,27 +1,116 @@
 import sqlite3
-import os
+import pathlib
+import utils
+import re
+
+
 
 class BD_CRUD:
-    def __init__(self):
-        pass
+    def __init__(self, conexao, cursor_conexao):
+        self.conexao = conexao
+        self.cursor_conexao = cursor_conexao
+
+    def query(self, query, dicionario_itens={}):
+        if (dicionario_itens):
+            query = self.cursor_conexao.execute(query. dicionario_itens)
+            if (query):
+                if (query.startswith('SELECT')):
+                    return query.fetchall()
+                # elif (query.startswith('INSERT')):
+                #     return query.lastrowid
+                else:  
+                    return query
+            else:
+                return False
+        else:
+            query = self.cursor_conexao.execute(query)
+
+    def check_table_existence(self):
+        try:
+            self.read('prova_questoes', '*', False)
+            return True
+        except sqlite3.OperationalError:
+            return False
+
+    def create_table(self, nome_tabela, colunas_e_tipos):
+
+        '''
+        template colunas_e_tipos:
+            [('c1', 'int primary key not null'), ('c2', 'text'), ...]
+        '''
+        colunas_para_query = ', '.join(['%s %s'%(c[0], c[1]) for c in colunas_e_tipos])
+        query = 'CREATE TABLE {0} ({1});'.format(nome_tabela, colunas_para_query)
+        self.query(query)
 
     def create(self, tabela, valores):
-        pass
+        nomes_colunas = ""
+        valores_colunas = ""
+        for valor in valores:
+            nomes_colunas += "%s, " % valor
+            valores_colunas ++ "%s, " % valores[valor]
 
-    def read(self, tabela, itens_para_buscar="*", chaves=False):
-        pass
+        nomes_colunas.rstrip(', ')
+        valores_colunas.rstrip(', ')
+        query = "INSERT INTO {0} ({1}) VALUES ({2})".format(tabela, nomes_colunas, valores_colunas)
+        return self.query(query)
 
-    def readMany(self):
-        pass
+    def read(self, tabela, itens_para_buscar=("*"), where={}, order_by=(), group=()):
 
-    def update(self, tabela, novo_valor, chaves):
-        pass
+        itens_para_buscar = ', '.join(itens_para_buscar)
 
-    def delete(self):
-        pass
+        texto_where = ' WHERE '
+        for chave in where:
+            texto_where += "%s=:%s, " % (chave, chave)
+        texto_where.rstrip(', ')
+
+        texto_group = ' GROUP BY ' + ', '.join(group)
+
+        texto_order_by = ' ORDER BY ' + ", ".join(order_by)
+
+        query = "SELECT {} FROM {};".format(itens_para_buscar, tabela)
+
+        if where:
+            query += texto_where
+
+        if group:
+            query += texto_group
+
+        if  order_by:
+            query += texto_order_by
+
+        return self.query(query)
+
+    def update(self, tabela, novo_valor, chaves={}):
+        texto_novo_valor = ''
+        for chave in novo_valor:
+            texto_novo_valor += ' %s=:%s, ' % (chave, chave)
+        texto_novo_valor.rstrip(', ')
+
+        texto_chaves = ''
+        for chave in chaves:
+            texto_chaves += ' %s=:%s_chaves, ' % (chave, chave)
+            chaves[chave + '_chaves'] = chaves[chave]
+            del chaves[chave]
+
+        texto_chaves.rstrip(', ')
+
+        base_query = 'UPDATE {} SET {}c'.format(tabela, novo_valor)
+        if chaves:
+           base_query += texto_chaves
+        
+        return self.query(base_query, novo_valor.update(chaves))
+
+    def delete(self, tabela, where):
+        texto_where = ''
+        for chave in where:
+            texto_where += " {0}=:{0}, " % (chave)
+        texto_where.rstrip(', ')
+
+        query = "DELETE FROM tabela WHERE " + texto_where
+        return self.query(query, where)
 
     def applyChanges(self):
-        pass
+        self.conexao.commit()
 
 def Prova(BD_CRUD):
     CDG_OK = 1
@@ -36,31 +125,75 @@ def Prova(BD_CRUD):
             self.questoes[numero_questao] = questao
             return questao
         elif codigo = self.CDG_JA_EXISTE_NUMERO:
-            del questao
-            return -1
-        
+            return False
 
-    def obterQuestao(self):
-        return self.questoes[numero_questao]
+    def obterQuestao(self, numero_questao):
+        if (numero_questao in self.questoes):
+            return self.questoes[numero_questao]
+        else:
+            resultado = self.read('tbl_prova',  where={'numero_questao': numero_questao})
+            if (resultado):
+                questao = Questao(resultado['numero_questao'],
+                               resultado['valor_questao'],
+                               resultado['enunciado'])
+                self.questao[numero_questao] = questao
+                return questao
+            else:
+                return False
 
     def obterQuestoes(self):
         return self.questoes
 
-    def __bool__(self): # Substitui "ja existe prova"
-        try:
-            self.read('prova_questoes', '*', False)
+    def apagarQuestao(self, numero_questao):
+        if (isinstance(numero_questao, int)):
+            pass
+        elif (isinstance(numero_questao, Questao)):
+            numero_questao = numero_questao.obterNumeroQuestao()
+
+        for criterio in self.questoes[questao].obterCriterios():
+            self.delete('tbl_criterios', {'id_criterio': criterio.obterIdCriterio()})
+
+        self.delete('tbl_prova', {'numero_questao': numero_questao})
+        self.delete('tbl_notas', {'questao': numero_questao})
+        
+        if deu_certo:
+            del self.questoes[numero_questao]
             return True
-        except sqlite3.OperationalError:
+        else:
             return False
+
+    def trocarQuestao(self, questao1, questao2, numero_temporario):
+        if (isinstance(questao1, Questao)):
+            questao1 = questao1
+        elif (isinstance(questao1, int)):
+            questao1 = self.questoes[questao1]
+
+        if (isinstance(questao2, Questao)):
+            questao2 = questao2
+        elif (isinstance(questao2, int)):
+            questao2 = self.questoes[questao2]
+
+        id_questao1 = questao1.obterNumeroQuestao()
+        id_questao2 = questao2.obterNumeroQuestao()
+
+        questao1.editarNumeroQuestao(numero_temporario)
+        questao2.editarNumeroQuestao(id_questao1)
+        questao1.editarNumeroQuestao(id_questao2)
+
+    def __bool__(self): # Substitui "ja existe prova"
+        return self.check_table_existence(nome_tabela)
 
     def __iter__(self): # Para percorrer as questoes
         pass
 
 def Questao(BD_CRUD):
+    CDG_OK = 1
+    CDG_JA_EXISTE_NUMERO = 2
     def __init__(self, numero_questao, valor_questao=0, enunciado=''):
         self.numero_questao = numero_questao
         self.valor_questao = valor_questao
         self.enunciado = enunciado
+        self.criterios = {}
 
     def __hash__(self):
         return hash((self.numero_questao, self.valor_questao, self.enunciado))
@@ -78,10 +211,21 @@ def Questao(BD_CRUD):
         return not(self == outro)
 
     def cadastrarQuestaoEmBranco(self):
-        self.create('tbl_prova', {'numero_questao':self.numero_questao})
+        try:
+            self.create('tbl_prova', {'numero_questao':self.numero_questao})
+            return self.CDG_OK
+        except sqlite3.IntegrityError:
+            return self.CDG_JA_EXISTE_NUMERO
+
     
     def obterValor(self):
-        return self.valor_questao
+        if (self.valor_questao):
+            return self.valor_questao
+        else:
+            self.valor_questao = self.read('tbl_prova',
+                                           ('valor_questao'),
+                                           {'numero_questao': self.numero_questao})['valor_questao']
+            return self.valor_questao
 
     def editarValor(self, novo_valor_questao):
         deu_certo = self.update('tbl_prova',
@@ -96,7 +240,12 @@ def Questao(BD_CRUD):
 
 
     def obterEnunciado(self):
-        return self.enunciado
+        if (self.enunciado):
+            return self.enunciado
+        else:
+            self.enunciado = self.read('tbl_prova', ('enunciado'),{'numero_questao': self.numero_questao})['enunciado']
+            return self.enunciado
+
 
     def editarEnunciado(self, novo_enunciado):        
         deu_certo = self.update('tbl_prova',
@@ -110,23 +259,27 @@ def Questao(BD_CRUD):
             return False
 
     def obterCriterio(self, id_criterio):
-        criterio = self.read('tbl_criterios', '*', {'id_criterio': id_criterio})
-        if criterio:
-            return Criterio(questao=self,
-                id_criterio=id_criterio,
-                nome_criterio=criterio['nome_criterio'],
-                peso_criterio=criterio['peso_criterio'])
+        if (id_criterio in self.criterios):
+            return self.criterios[id_criterio]
         else:
-            return False
+            criterio = self.read('tbl_criterios', where={'id_criterio': id_criterio})
+            if criterio:
+                self.criterios[id_criterio] = Criterio(questao=self,
+                    id_criterio=id_criterio,
+                    nome_criterio=criterio['nome_criterio'],
+                    peso_criterio=criterio['peso_criterio'])
+                return self.criterios[id_criterio]
+            else:
+                return False
 
     def obterCriterios(self):
-        criterios =  self.read('tbl_criterios', '*', False, sort_by='nome_criterio')
-        criterios_ = []
-        for criterio in criterios:
-            criterios_.append(Criterio(
-                id_criterio=criterio['id_criterio'],
-                nome_criterio=criterio['nome_criterio'],
-                peso_criterio=criterio['peso_criterio']))
+        criterios_obtidos =  self.read('tbl_criterios', ('*'), False, sort_by=('nome_criterio'))
+        criterios_ = {}
+        for criterio in criterios_obtidos:
+            criterios_[criterio['id_criterio']] = Criterio(self,
+                                                        id_criterio=criterio['id_criterio'],
+                                                        nome_criterio=criterio['nome_criterio'],
+                                                        peso_criterio=criterio['peso_criterio'])
         return criterios_
 
     def cadastrarCriterio(self):
@@ -134,7 +287,7 @@ def Questao(BD_CRUD):
         criterio_criado.criarCriterioEmBranco()
         return criterio_criado
 
-    def obterNumeroDaQuestao(self):
+    def obterNumeroQuestao(self):
         return self.numero_questao
 
     def editarNumeroQuestao(self, novo_numero_questao):
@@ -184,7 +337,10 @@ def Criterio(BD_CRUD):
         return self.id_criterio
 
     def obterNomeCriterio(self):
-        return self.nome_criterio
+        if (self.nome_criterio):
+            return self.nome_criterio
+        else:
+            return self.read('tbl_criterios', ('nome_criterio'), {'id_criterio': self.id_criterio})
 
     def editarNomeCriterio(self, novo_nome_criterio):
         deu_certo = self.update('tbl_criterios',
@@ -198,7 +354,10 @@ def Criterio(BD_CRUD):
             return False
 
     def obterPesoCriterio(self):
-        return self.peso_criterio
+        if (self.peso_criterio):
+            return self.peso_criterio
+        else:
+            return self.read('tbl_criterios', ('peso_criterio'), {'id_criterio': self.id_criterio})
 
     def editarPesoCriterio(self, novo_peso_criterio):
         deu_certo = self.update('tbl_criterios',
@@ -229,17 +388,45 @@ def Aluno(BD_CRUD):
         self.nome = nome
         self.matricula = matricula
 
-        self.id_aluno = self.create('tbl_alunos', {'nome':nome, 'matricula':matricula})
+        self.id_aluno = random.randrange(1, 1000)
+        self.create('tbl_alunos', {'id_aluno': id_aluno, 'nome':nome, 'matricula':matricula})
         self.respostas = {}
 
     def obterCodigo(self, questao):
-        return self.respostas[questao]
+        return self.respostas[questao]['codigo']
+
+    def apagarResposta(self, questao, criterio=False):
+        if (isinstance(questao, Questao) and isinstance(criterio, Criterio)):
+            id_resposta = self.respostas[questao][criterio].obterIdResposta()
+            self.delete('tbl_notas', {'id_resposta': id_resposta})
+
+        if (isinstance(questao, int)):
+            id_questao = questao
+        elif (isinstance(questao, Questao)):
+            id_questao = questao.obterNumeroQuestao()
+
+        if (isinstance(criterio, int)):
+            id_criterio = criterio
+        elif (isinstance(criterio, Criterio)):
+            id_criterio = criterio.obterIdCriterio()
+
+        if (criterio):
+            self.delete('tbl_notas', {'questao': id_questao})
+        else:
+            self.delete('tbl_notas', {'questao': id_questao, 'criterio': id_criterio})
 
     def obterIdAluno(self):
         return self.id_aluno
 
     def obterMatricula(self):
-        return self.matricula if self.matricula else 'Não cadastrada'
+        if (self.matricula):
+            return self.matricula
+        else:
+            resultado = self.read('tbl_alunos', ('matricula'), {'id_aluno': self.id_aluno})
+            if (resultado):
+                return resultado['matricula']
+            else:
+                return 'Não cadastrada'
 
     def editarMatricula(self, nova_matricula):
         deu_certo = self.update('tbl_alunos', {'matricula': nova_matricula}, {'id_aluno': self.id_aluno})
@@ -264,43 +451,57 @@ def Aluno(BD_CRUD):
 
     def obterRespostas(self):
         return self.respostas
-        #return [Resposta(c['criterio'], c['questao'], self) for c in self.readMany('tbl_notas', {'aluno':self.id_aluno})]
 
     def obterResposta(self, questao, criterio=None):
         if criterio:
             return self.respostas[questao][criterio]
         else:
             return self.respostas[questao]
-        # if criterio:
-        #     resp = self.read('tbl_notas', {'criterio': criterio, 'questao':questao, 'aluno': self.id_aluno})
-        # else:
-        #     resp = self.read('tbl_notas', {'questao':questao, 'aluno': self.id_aluno})
-        # return Resposta(resp['criterio'], resp['questao'], self)
 
     def cadastrarResposta(self, criterio, questao):
         resp = Resposta(criterio, questao, self)
 
         self.respostas[questao][criterio] = resp
+        resp.cadastrarRespostaEmBranco()
         
-        return resp.cadastrarRespostaEmBranco()
+        return resp
+
+    def obterNotaAlunoDeQuestao(self, questao, criterio=False):
+        if (criterio):
+            return self.respostas[questao][criterio].obterNota()
+        else:
+            total_criterio = 0
+            nota_aluno_criterios = 0
+            valor_questao = questao.ObterValorQuestao()
+            for criteiro in self.respostas[questao]:
+                if (criterio == 'codigo'):
+                    pass
+
+                total_criterio += criterio.obterPesoCriterio()
+                nota_aluno_criterios += self.respostas[questao][criterio].obterNota() * valor_questao
+            
+            return nota_aluno_criterios / total_criterio
+
 
     def obterNotaAluno(self, questao=False, criterio=False):
         if questao:
             if criterio:
-                pass
+                return self.obterNotaAlunoDeQuestao(questao, criterio)
             else:
-                pass
+                return self.obterNotaAlunoDeQuestao(questao)
         else:
-            pass
+            total = 0.0
+            for questao in self.respostas:
+                total += obterNotaAlunoDeQuestao(questao)
+            return total
 
-    def __iter__(self): # Para percorrer as respostas
-        pass
-
-def Resposta(BD_CRUD):
-    def __init__(self, criterio, questao, aluno):
+class Resposta(BD_CRUD):
+    def __init__(self, criterio, questao, aluno, codigo='', valor=0):
         self.criterio = criterio
         self.questao = questao
         self.aluno = aluno
+        self.codigo = codigo
+        self.valor = valor
 
     def cadastrarRespostaEmBranco(self):
         self.id_reposta = self.create('tbl_notas', {'criterio': self.criterio.obterIdCriterio(),
@@ -318,7 +519,10 @@ def Resposta(BD_CRUD):
         return self.aluno
 
     def obterNota(self):
-        return self.nota
+        if (self.nota):
+            return self.nota
+        else:
+            return self.read('tbl_notas', ('valor'), resposta)
 
     def editarNota(self, nova_nota):
         deu_certo = self.update('tbl_notas',
@@ -331,12 +535,21 @@ def Resposta(BD_CRUD):
             return False
 
     def obterCodigo(self):
-        return self.codigo
+        if (self.codigo):
+            return self.codigo
+        else:
+            return self.read(tabela='tbl_notas',
+                             itens_para_buscar=('codigo'),
+                             where={'criterio':self.criterio.obterIdCriterio(),
+                                    'questao': self.questao.obterNumeroQuestao(),
+                                    'aluno': self.aluno.obterIdAluno()})['codigo']
 
     def editarCodigo(self, novo_codigo):
         deu_certo = self.update('tbl_notas',
-            {'codigo': novo_codigo},
-            {'criterio': self.criterio, 'questao': self.questao, 'aluno': self.aluno.obterIdAluno()})
+                               novo_valor={'codigo': novo_codigo},
+                               chaves= {'criterio': self.criterio.obterIdCriterio(),
+                                        'questao': self.questao.obterNumeroQuestao(),
+                                        'aluno': self.aluno.obterIdAluno()})
 
         if deu_certo:
             self.codigo = novo_codigo
@@ -345,12 +558,43 @@ def Resposta(BD_CRUD):
             return False
 
 
-class PastaProjetos:
-    def __init__(self):
-        pass
+class PastaProjetos(BD_CRUD):
+    def __init__(self, caminho):
+        self.caminho = caminho
+
+        self.conexao = sqlite3.connect(caminho.strip() + "/CatiaCorrige.bd" )
+        self.conexao.row_factory = utils.dict_factory
+        self.cursor_conexao = self.conexao.cursor()
+
+        BD_CRUD.__init__(self.conexao, self.cursor_conexao)
+
+        if not (check_table_existence('tbl_alunos')):
+            self.create_table('tbl_alunos', [('id_aluno', 'INT PRIMARY KEY'),
+                                             ('matricula', 'TINYTEXT'),
+                                             ('nome', 'TEXT'),
+                                             ('FOREIGN KEY (id_aluno)', 'REFERENCES tbl_notas(aluno)')])
+
+        self.alunos = {}
+
+    def obterConexao(self):
+        return self.conexao
+
+    def obterCursor(self):
+        return self.cursor_conexao
+
+    def processarPasta(self):
+        for item in pathlib.Path(caminho).iterdir():
+            if item.is_dir():
+                deu_match = re.match(r'([\w]+)_(\w+)', str(item))
+                
+                if (deu_match):
+                    nome_aluno, n_matricula = deu_match.groups()
+
+                    aluno = Aluno(nome_aluno, n_matricula)
+                    self.alunos[aluno.obterIdAluno()] = aluno
 
     def obterAlunos(self):
-        pass
+        return self.alunos
 
-    def listaProjetos(self):
-        pass
+    def listasProjetos(self):
+        return [x for x in pathlib.Path(caminho).iterdir() if x.is_dir() and re.match(r'([\w]+)_(\w+)', str(x))]
