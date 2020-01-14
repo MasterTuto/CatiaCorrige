@@ -1,16 +1,19 @@
+import bancodedados
 import wx.py as py
-import backend
 import utils
 import wx
 import re
 import os
 
 class DialogoCriacaoProva(wx.Dialog):
-	def __init__(self, parent, *args, **kwargs):
+	def __init__(self, parent, prova, *args, **kwargs):
 		wx.Dialog.__init__(self, parent=parent,
 			style=wx.DEFAULT_DIALOG_STYLE | wx.CAPTION | wx.MINIMIZE_BOX | wx.RESIZE_BORDER, title="Configuração de prova",
 			size=(500, 500),
 			*args, **kwargs)
+
+		self.prova = prova
+		self.dadosTemporarios = {}
 
 		self.painel = wx.Panel(self)
 		sizerPrincipal = wx.BoxSizer(wx.VERTICAL)
@@ -97,14 +100,55 @@ class DialogoCriacaoProva(wx.Dialog):
 		self.botaoOk.Disable()
 
 		self.Bind(wx.EVT_TREE_SEL_CHANGED, self.quandoItemForFocado, self.treeCtrlProva)
+		self.Bind(wx.EVT_TEXT, self.aoMudarNomeCriterio, self.inputCriterio)
+		self.Bind(wx.EVT_SPINCTRL, self.aoMudarPesoCriterio, self.inputPesoCriterio)
+		self.Bind(wx.EVT_TEXT, self.aoMudarEnunciadoQuestao, self.inputEnunciado)
+		self.Bind(wx.EVT_SPINCTRL, self.aoMudarValorQuestao, self.inputValor)
 
 		self.painel.SetSizer(sizerPrincipal)
 		sizerPrincipal.Fit(self)
 		self.Show(True)
 
+	def aoMudarNomeCriterio(self, event):
+		criterio = self.treeCtrlProva.GetSelection()
+		itemQuestao = self.treeCtrlProva.GetItemParent(criterio)
+		numeroQuestao = int(self.treeCtrlProva.GetItemText( itemQuestao ).split()[-1])
+		numeroDeCriterio = int(self.treeCtrlProva.GetItemText( criterio ).split('_')[-1])
+		
+		novoNomeCriteiro = self.inputCriterio.GetValue()
+
+		self.dadosTemporarios[numeroQuestao][numeroDeCriterio-1].editarNomeCriterio(
+																 novoNomeCriteiro + "_" + str(numeroDeCriterio))
+
+		self.treeCtrlProva.SetItemText(criterio, novoNomeCriteiro + "_" + str(numeroDeCriterio))
+
+	def aoMudarPesoCriterio(self, event):
+		criterio = self.treeCtrlProva.GetSelection()
+		itemQuestao = self.treeCtrlProva.GetItemParent(criterio)
+		numeroQuestao = int(self.treeCtrlProva.GetItemText( itemQuestao ).split()[-1])
+		numeroDeCriterio = int(self.treeCtrlProva.GetItemText( criterio ).split('_')[-1])
+		
+		novoPesoCriterio = self.inputPesoCriterio.GetValue()
+		self.dadosTemporarios[numeroQuestao][numeroDeCriterio-1].editarPesoCriterio(novoPesoCriterio)
+
+	def aoMudarEnunciadoQuestao(self, event):
+		itemQuestao = self.treeCtrlProva.GetSelection()
+		numeroQuestao = int(self.treeCtrlProva.GetItemText( itemQuestao ).split()[-1])
+		
+		novoEnunciado = self.inputEnunciado.GetValue()
+		self.prova.obterQuestao(numeroQuestao).editarEnunciado(novoEnunciado)
+
+	def aoMudarValorQuestao(self, event):
+		itemQuestao = self.treeCtrlProva.GetSelection()
+		numeroQuestao = int(self.treeCtrlProva.GetItemText( itemQuestao ).split()[-1])
+		
+		novoValorQuestao = self.inputValor.GetValue()
+		self.prova.obterQuestao(numeroQuestao).editarPesoCriterio(novoValorQuestao)
+	
 	def quandoItemForFocado(self, event):
 		selecionado = self.treeCtrlProva.GetSelection()
 		pai = self.treeCtrlProva.GetItemParent(selecionado)
+		
 		if (pai == self.rootTreeCtrlProva):
 			self.inputCriterio.Disable()
 			self.inputPesoCriterio.Disable()
@@ -148,6 +192,22 @@ class DialogoCriacaoProva(wx.Dialog):
 
 		return sizer
 
+	def ativarOkSePossivel(self):
+		if self.treeCtrlProva.GetChildrenCount(self.rootTreeCtrlProva, recursively=False) == 0:
+			self.botaoOk.Disable()
+			return False
+		
+		filhoAtual = self.treeCtrlProva.GetFirstChild(self.rootTreeCtrlProva)
+		while (filhoAtual):
+			if not filhoAtual[0]: break
+			if self.treeCtrlProva.GetChildrenCount(filhoAtual[0], recursively=False) == 0:
+				self.botaoOk.Disable()
+				return False
+			filhoAtual = self.treeCtrlProva.GetNextChild(*filhoAtual)
+
+		self.botaoOk.Enable()
+		return True
+
 	def adicionarCriterio(self, event):
 		itemSelecionado = self.treeCtrlProva.GetSelection()
 		itemAdicionado = None
@@ -156,7 +216,15 @@ class DialogoCriacaoProva(wx.Dialog):
 			pai = self.treeCtrlProva.GetItemParent(itemSelecionado)
 			if pai == self.rootTreeCtrlProva:
 				numeroDeCriterios = self.treeCtrlProva.GetChildrenCount(itemSelecionado)
-				itemAdicionado = self.treeCtrlProva.AppendItem(itemSelecionado, "Criterio %s"%(numeroDeCriterios+1))
+				itemAdicionado = self.treeCtrlProva.AppendItem(itemSelecionado, "Criterio_%s"%(numeroDeCriterios+1))
+
+				numeroQuestao = int(self.treeCtrlProva.GetItemText( itemSelecionado ).split()[-1])
+				questao = self.prova.obterQuestao(numeroQuestao)
+				criterio = questao.cadastrarCriterio()
+
+				self.dadosTemporarios[numeroQuestao].append(criterio)
+
+		self.ativarOkSePossivel()
 
 		return itemAdicionado
 
@@ -164,6 +232,12 @@ class DialogoCriacaoProva(wx.Dialog):
 		itemSelecionado = self.treeCtrlProva.GetSelection()
 		numeroDeQuestoes = self.treeCtrlProva.GetChildrenCount(self.rootTreeCtrlProva, recursively=False)
 		itemAdicionado = self.treeCtrlProva.AppendItem(self.rootTreeCtrlProva, "Questão %s"% (numeroDeQuestoes+1))
+
+		questao = self.prova.criarQuestaoEmBranco(numeroDeQuestoes+1)
+		self.dadosTemporarios[questao.obterNumeroQuestao()] = []
+
+		self.ativarOkSePossivel()
+		
 		return itemAdicionado
 
 
@@ -182,6 +256,8 @@ class DialogoCriacaoProva(wx.Dialog):
 			respostaDialogo = dialogo.ShowModal()
 			if respostaDialogo == wx.ID_YES:
 				self.treeCtrlProva.Delete(itemSelecionado)
+
+		self.ativarOkSePossivel()
 
 
 	def gerarTreeCtrlProva(self):
@@ -237,7 +313,7 @@ class meuPrograma(wx.Frame):
 
 		elementosTopSizer = self.gerarElementoTopSizer()
 
-		treeCtrlAlunos = self.criarTreeCtrl(elementos)
+		listCtrlAlunos = self.criarListCtrlAlunos(elementos)
 		
 		self.notebookGerado = self.gerarNotebook()
 		codeControl = self.criarControles()
@@ -248,7 +324,7 @@ class meuPrograma(wx.Frame):
 
 		topSizer.Add(elementosTopSizer, 1, wx.ALIGN_CENTER, 5)
 
-		leftMiddleSizer.Add(treeCtrlAlunos, 1, wx.EXPAND, 5)
+		leftMiddleSizer.Add(listCtrlAlunos, 1, wx.EXPAND, 5)
 
 		middleMiddleSizer.Add(self.notebookGerado, 6, wx.EXPAND | wx.ALL | wx.EXPAND, 10)
 		middleMiddleSizer.Add(codeControl, 1, wx.EXPAND | wx.ALL | wx.EXPAND, 10)
@@ -353,44 +429,62 @@ class meuPrograma(wx.Frame):
 			self.Bind(wx.EVT_MENU, funcoes[i], id=101+i)
 
 	def carregarQuestoesDoAluno(self, idAluno):
-		nomeAluno = self.treeCtrlAlunos.GetItemText(idAluno)
-		respostas = self.projetos[nomeAluno].obterRespostas()
-		for resposta in respostas:
-			if not resposta.endswith(".bd"):
-				numero = int(re.match(resposta, r".+([0-9]).+").group(1))
-				questao = self.prova.obterQuestao(numero-1)
+		nomeAluno = self.listCtrlAlunos.GetItemText(idAluno.GetId()).split('_')[0]
+		respostas = self.projetos.obterAluno(nomeAluno).obterRespostas()
+		print(respostas)
+		for questao in respostas:
+			numero = questao.obterNumeroQuestao()
 
-				painelGenerico = painelGenericoQuestao(
-					parent=self.notebookGerado,
-					descricao = questao.obterEnunciado(),
-					valor = questao.obterValor(),
-					codigo = self.projetos[nomeAluno].obterCaminho() + resposta
-					)
-				self.notebookGerado.AddPage(painelGenerico)
+			
+			aluno = self.projetos.obterAluno(nomeAluno)
+			respostas = aluno.obterResposta(questao)
+			painelGenerico = painelGenericoQuestao(
+				parent=self.notebookGerado,
+				descricao = questao.obterEnunciado(),
+				valor = questao.obterValor(),
+				codigo = respostas['codigo'],
+				enunciado=self.prova.obterQuestao(numero).obterEnunciado())
+			self.notebookGerado.AddPage(painelGenerico, "Questão %s" % (questao.obterNumeroQuestao()))
 
 		self.notebookGerado.ChangeSelection(0)
 
 
 	def abrirPastaDaProva(self, event):
 		self.pastaProjeto = wx.DirSelector()
-		self.projetos = backend.PastaProjetos(self.pastaProjeto)
+		if (self.pastaProjeto):
+			self.projetos = bancodedados.PastaProjetos(self.pastaProjeto)
+			self.conexao = self.projetos.obterConexao()
+			self.cursor_conexao = self.projetos.obterCursor()
 
-		self.prova = backend.Prova(self.pastaProjeto)
-		if not self.prova:#(self.prova.jaExisteProva()):
+		else:
+			self.projetos = None
+			event.Skip()
+			return False
+
+		self.prova = bancodedados.Prova(self.conexao, self.cursor_conexao)
+		if not self.prova:
+			self.prova.criarProva()
 			wx.MessageBox("Não existe prova cadastrada, clique OK para criar",
 				parent=self,
 				style=wx.ICON_EXCLAMATION | wx.OK)
 
-			with DialogoCriacaoProva(self) as dlg:
+			with DialogoCriacaoProva(self,self.prova) as dlg:
 				retornoDlg = dlg.ShowModal()
+				
 				if retornoDlg == wx.ID_CANCEL:
 					wx.MessageBox("Criação cancelada",
 						parent=self,
 						style=wx.ICON_INFORMATION | wx.OK)
+
+					self.projetos.fecharConexao()
+					os.remove(self.pastaProjeto+'/CatiaCorrige.bd')
 					return False
 
-		self.preencherTreeCtrl(self.projetos.obterAlunos())
-		self.carregarQuestoesDoAluno(self.treeCtrlAlunos.GetFirstChild(self.rootTreeCtrl))
+		self.projetos.alterarProva(self.prova)
+		self.projetos.processarPasta()
+		self.projetos.applyChanges()
+		self.preencherListCtrl(self.projetos.listarProjetos())
+		self.carregarQuestoesDoAluno(self.listCtrlAlunos.GetItem(0))
 
 	def obterTextCtrl(self):
 		paginaAtual = self.notebookGerado.GetCurrentPage()
@@ -554,49 +648,33 @@ class meuPrograma(wx.Frame):
 		return sizer
 
 
-	def preencherTreeCtrl(self, alunosEQuestoes=None):
-		for aluno in alunosEQuestoes:
-			alunoAtual = self.treeCtrlAlunos.AppendItem(self.rootTreeCtrl, aluno)
-
-			for questao in alunosEQuestoes[aluno].obterRespostas():
-				if not (questao.endswith('bd')):
-					self.treeCtrlAlunos.AppendItem(alunoAtual, questao)
-
+	def preencherListCtrl(self, pastas=[]):
+		print(pastas)
+		for pasta in range(len(pastas)):
+			print(pasta, pastas[pasta])
+			self.listCtrlAlunos.InsertItem(pasta, pastas[pasta])
 	
 	def duploCliqueEmItem(self, event):
 		item = event.GetItem()
-		pai = self.treeCtrlAlunos.GetItemParent(item)
-		if (pai != self.rootTreeCtrl):
-			self.preencherTextCtrlParaAluno(item)
 		
-		elif (pai == self.rootTreeCtrl):
-			self.carregarQuestoesDoAluno()
-
-	def preencherTextCtrlParaAluno(self, item):
-		nomePai = self.treeCtrlAlunos.GetItemText(pai)
-
-		projetos_ = self.projetos.listarProjetos()
-
-		nomeArquivo = projetos_[nomePai].obterCaminho() + "\\"+self.treeCtrlAlunos.GetItemText(item)
-
-		matchNumero = re.match(r'([0-9])\.\w+$', nomeArquivo)
-		if(matchNumero):
-			numero = matchNumero.group(1)
-
-		self.atualizarParaQuestao(nomeArquivo)
-
+		self.carregarQuestoesDoAluno(item)
 
 	def atualizarParaQuestao(self, nomeArquivo):
 		self.txtCtrlCodigoAtual.LoadFile(nomeArquivo)
 
-	def criarTreeCtrl(self, elementos=None):
-		self.treeCtrlAlunos = wx.TreeCtrl(self.painel)
-		self.rootTreeCtrl = self.treeCtrlAlunos.AddRoot("Alunos")
+	def criarListCtrlAlunos(self, elementos=None):
+		self.listCtrlAlunos = wx.ListCtrl(self.painel, style=wx.LC_REPORT)
 
-		self.Bind(wx.EVT_TREE_ITEM_ACTIVATED, self.duploCliqueEmItem, self.treeCtrlAlunos)
+		coluna = wx.ListItem()
+		coluna.Text = "Nome da Pasta"
+		coluna.Width = 200
+		self.listCtrlAlunos.InsertColumn(0, coluna)
 
-		return self.treeCtrlAlunos
+		self.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.duploCliqueEmItem, self.listCtrlAlunos)
 
-prog = wx.App()
-meuPrograma(None, "teste")
-prog.MainLoop()
+		return self.listCtrlAlunos
+
+if __name__ == '__main__':
+	prog = wx.App()
+	meuPrograma(None, "teste")
+	prog.MainLoop()
