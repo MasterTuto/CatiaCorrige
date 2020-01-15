@@ -11,6 +11,7 @@ class BD_CRUD:
         self.cursor_conexao = cursor_conexao
 
     def query(self, txt_query, dicionario_itens={}):
+        print(txt_query)
         if (dicionario_itens):
             query = self.cursor_conexao.execute(txt_query, dicionario_itens)
             if (query):
@@ -296,7 +297,7 @@ class Questao(BD_CRUD):
                 return False
 
     def obterCriterios(self):
-        criterios_obtidos =  self.read('tbl_criterios', ('*'), False, sort_by=('nome_criterio'))
+        criterios_obtidos =  self.read('tbl_criterios', ('*',), {}, order_by=('nome_criterio',))
         criterios_ = {}
         for criterio in criterios_obtidos:
             criterios_[criterio['id_criterio']] = Criterio(self,
@@ -357,6 +358,8 @@ class Criterio(BD_CRUD):
             self.create('tbl_criterios', {'id_questao': self.questao.obterNumeroQuestao(), 'id_criterio': self.id_criterio})
         except sqlite3.IntegrityError:
             self.criarCriterioEmBranco()
+
+        return self.id_criterio
 
     def obterQuestaoRelacionado(self):
         return self.questao
@@ -636,6 +639,7 @@ class PastaProjetos(BD_CRUD):
         self.registrarTabelasSeNaoExistem()
         
         self.alunos = {}
+        self.pastas_de_alunos = {}
 
     def alterarProva(self, prova):
         self.prova = prova
@@ -690,6 +694,7 @@ class PastaProjetos(BD_CRUD):
 
                     aluno = Aluno(nome_aluno, n_matricula, conexao=self.conexao, cursor_conexao=self.cursor_conexao)
                     self.alunos[nome_aluno] = aluno
+                    self.pastas_de_alunos[nome_aluno] = {}
 
                 for item_ in item.iterdir():
                     deu_match = re.match(r'\w*([0-9]+)', str(item_.parts[-1]))
@@ -698,13 +703,25 @@ class PastaProjetos(BD_CRUD):
 
                         questao = self.prova.obterQuestao(numero_questao)
                         
-                        with open(item_) as f:
+                        with open(item_, encoding='utf-8') as f:
+                            if (str(item_).endswith('.exe')):
+                                f.close()
+                                continue
+
+                            self.pastas_de_alunos[nome_aluno][numero_questao] = item_
                             codigo = f.read()
+                            
                             resposta = aluno.cadastrarResposta(questao=questao, criterio=None, codigo=codigo)
                             resposta.editarCodigo(codigo)
 
     def obterAlunos(self):
         return self.alunos
+
+    def obterPastaAluno(self, aluno, questao=False):
+        if not questao:
+            return self.pastas_de_alunos[aluno]
+        else:
+            return self.pastas_de_alunos[aluno][questao]
 
     def obterAluno(self, nome_aluno):
         return self.alunos[nome_aluno] if nome_aluno in self.alunos else None
