@@ -4,27 +4,26 @@ import random
 import utils
 import re
 
-
 class BD_CRUD:
     def __init__(self, conexao, cursor_conexao):
         self.conexao = conexao
         self.cursor_conexao = cursor_conexao
 
     def query(self, txt_query, dicionario_itens={}):
-        print(txt_query)
         if (dicionario_itens):
             query = self.cursor_conexao.execute(txt_query, dicionario_itens)
+
             if (query):
                 if (txt_query.startswith('SELECT')):
-                    return query.fetchall()
-                # elif (query.startswith('INSERT')):
-                #     return query.lastrowid
+                    a = query.fetchall()
+                    return a
                 else:  
                     return query
             else:
                 return False
         else:
             query = self.cursor_conexao.execute(txt_query)
+            return query.fetchall()
 
     def check_table_existence(self, nome_tabela):
         try:
@@ -284,20 +283,20 @@ class Questao(BD_CRUD):
         if (id_criterio in self.criterios):
             return self.criterios[id_criterio]
         else:
-            criterio = self.read('tbl_criterios', where={'id_criterio': id_criterio})
+            criterio = self.read('tbl_criterios', where={'id_criterio': id_criterio})[0]
             if criterio:
                 self.criterios[id_criterio] = Criterio(questao=self,
                     id_criterio=id_criterio,
                     nome_criterio=criterio['nome_criterio'],
                     peso_criterio=criterio['peso_criterio'],
                     conexao=self.conexao,
-                    cursor=self.cursor_conexao)
+                    cursor_conexao=self.cursor_conexao)
                 return self.criterios[id_criterio]
             else:
                 return False
 
     def obterCriterios(self):
-        criterios_obtidos =  self.read('tbl_criterios', ('*',), {}, order_by=('nome_criterio',))
+        criterios_obtidos =  self.read('tbl_criterios', ('*',), {'id_questao': self.numero_questao}, order_by=('nome_criterio',))
         criterios_ = {}
         for criterio in criterios_obtidos:
             criterios_[criterio['id_criterio']] = Criterio(self,
@@ -310,7 +309,8 @@ class Questao(BD_CRUD):
 
     def cadastrarCriterio(self):
         criterio_criado = Criterio(self, conexao=self.conexao, cursor_conexao=self.cursor_conexao)
-        criterio_criado.criarCriterioEmBranco()
+        id_criterio = criterio_criado.criarCriterioEmBranco()
+        self.criterios[id_criterio] = criterio_criado
         return criterio_criado
 
     def obterNumeroQuestao(self):
@@ -371,7 +371,7 @@ class Criterio(BD_CRUD):
         if (self.nome_criterio):
             return self.nome_criterio
         else:
-            return self.read('tbl_criterios', ('nome_criterio'), {'id_criterio': self.id_criterio})
+            return self.read('tbl_criterios', ('nome_criterio',), {'id_criterio': self.id_criterio})[0]['nome_criterio']
 
     def editarNomeCriterio(self, novo_nome_criterio):
         deu_certo = self.update('tbl_criterios',
@@ -503,22 +503,26 @@ class Aluno(BD_CRUD):
 
     def cadastrarResposta(self, criterio=False, questao=False, codigo=False):
         resp = Resposta(criterio, questao, self, conexao=self.conexao, cursor_conexao=self.cursor_conexao)
+        resp.cadastrarRespostaEmBranco()
 
         if criterio:
-            self.respostas[questao][criterio] = resp
+            self.respostas[questao][criterio.obterIdCriterio()] = resp
         else:
             if (codigo):
                 self.respostas[questao] = {'codigo': codigo}
             else:
                 self.respostas[questao] = {}
         
-        resp.cadastrarRespostaEmBranco()
         
         return resp
 
     def obterNotaAlunoDeQuestao(self, questao, criterio=False):
         if (criterio):
-            return self.respostas[questao][criterio].obterNota()
+            try:
+                return self.respostas[questao][criterio].obterNota()
+            except KeyError: # Ainda não foi cadastrado uma resposta com tal criterio
+                return 0
+
         else:
             total_criterio = 0
             nota_aluno_criterios = 0
@@ -626,11 +630,18 @@ class Resposta(BD_CRUD):
             return False
 
 class PastaProjetos(BD_CRUD):
+    tem_permissao = False
+
     def __init__(self, caminho, prova=None):
         self.caminho = caminho
         self.prova = prova
 
-        self.conexao = sqlite3.connect(caminho.strip() + "\\CatiaCorrige.bd" )
+        try:
+            self.conexao = sqlite3.connect(caminho.strip() + "\\CatiaCorrige.bd" )            
+            self.tem_permissao = True
+        except:
+            return
+        
         self.conexao.row_factory = utils.dict_factory
         self.cursor_conexao = self.conexao.cursor()
 

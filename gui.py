@@ -2,12 +2,39 @@ from pathlib import WindowsPath, Path
 import bancodedados
 import wx.py as py
 import subprocess
+import threading
 import tempfile
 import config
 import utils
 import wx
 import re
 import os
+
+import time
+
+class DialogoCompilacao(wx.Dialog):
+	def __init__(self, *args, **kwargs):
+		wx.Dialog.__init__(self, *args, **kwargs)
+
+		sizer = wx.BoxSizer(wx.VERTICAL)
+
+		textoAcima = wx.StaticText(self, label="Compilando o código...")
+		self.gauge = wx.Gauge(self, range=75)
+
+		sizer.Add(textoAcima,1, wx.EXPAND)
+		sizer.Add(self.gauge,1, wx.EXPAND)
+
+		self.Bind(wx.EVT_TIMER, self.mudarValorGauge)
+		self.timer = wx.Timer(self)
+		self.timer.Start(100)
+
+		self.SetSizer(sizer)
+		sizer.Fit(self)
+		self.Show(True)
+
+	def mudarValorGauge(self, event):
+		self.gauge.Pulse()
+
 
 class DialogoCriacaoProva(wx.Dialog):
 	def __init__(self, parent, prova, *args, **kwargs):
@@ -270,7 +297,6 @@ class DialogoCriacaoProva(wx.Dialog):
 		return treeCtrl
 
 
-
 class painelGenericoQuestao(wx.Panel):
 	def __init__(self, parent, enunciado, valor, codigo, *args, **kwargs):
 		wx.Panel.__init__(self, parent)
@@ -301,6 +327,8 @@ class meuPrograma(wx.Frame):
 
 		self.alunoAtual = ''
 		self.projetos=False
+		self.valores= []
+		self.notasCriterios = []
 		
 		barraDeMenu = wx.MenuBar()
 
@@ -309,14 +337,14 @@ class meuPrograma(wx.Frame):
 		self.painel = wx.Panel(self)
 
 		# ==== DEFINIÇÃO SIZERS ====
-		sizerPrincipal = wx.BoxSizer(wx.VERTICAL)
+		self.sizerPrincipal = wx.BoxSizer(wx.VERTICAL)
 		
 		topSizer = wx.BoxSizer(wx.HORIZONTAL)
 		
-		middleSizer = wx.BoxSizer(wx.HORIZONTAL)
+		self.middleSizer = wx.BoxSizer(wx.HORIZONTAL)
 		leftMiddleSizer = wx.BoxSizer(wx.VERTICAL)
 		middleMiddleSizer=  wx.BoxSizer(wx.VERTICAL)
-		rightMiddleSizer = wx.BoxSizer(wx.VERTICAL)
+		self.rightMiddleSizer = wx.BoxSizer(wx.VERTICAL)
 
 		bottomSizer = wx.BoxSizer(wx.HORIZONTAL)
 		# =========================
@@ -328,7 +356,7 @@ class meuPrograma(wx.Frame):
 		self.notebookGerado = self.gerarNotebook()
 		codeControl = self.criarControles()
 		
-		avaliacao = self.gerarTelaDeAvaliacao()
+		self.criteriosAtuais = self.gerarTelaDeAvaliacao()
 
 		elementosBottomSizer = self.gerarElementoBottomSizer()
 
@@ -336,27 +364,27 @@ class meuPrograma(wx.Frame):
 
 		leftMiddleSizer.Add(listCtrlAlunos, 1, wx.EXPAND, 5)
 
-		middleMiddleSizer.Add(self.notebookGerado, 6, wx.EXPAND | wx.ALL | wx.EXPAND, 10)
-		middleMiddleSizer.Add(codeControl, 1, wx.EXPAND | wx.ALL | wx.EXPAND, 10)
+		middleMiddleSizer.Add(self.notebookGerado, 6, wx.EXPAND | wx.ALL | wx.EXPAND, 5)
+		middleMiddleSizer.Add(codeControl, 1, wx.EXPAND | wx.ALL | wx.EXPAND, 5)
 
-		rightMiddleSizer.Add(avaliacao, 1, wx.EXPAND| wx.ALL | wx.EXPAND, 10)
+		self.rightMiddleSizer.Add(self.criteriosAtuais, 1, wx.EXPAND| wx.ALL | wx.EXPAND, 5)
 
-		middleSizer.Add(leftMiddleSizer, 1, wx.EXPAND| wx.ALL | wx.EXPAND, 10)
-		middleSizer.Add(middleMiddleSizer, 3, wx.EXPAND| wx.ALL | wx.EXPAND, 10)
-		middleSizer.Add(rightMiddleSizer, 1, wx.EXPAND| wx.ALL | wx.EXPAND, 10)
+		self.middleSizer.Add(leftMiddleSizer, 1, wx.EXPAND| wx.ALL | wx.EXPAND, 5)
+		self.middleSizer.Add(middleMiddleSizer, 3, wx.EXPAND| wx.ALL | wx.EXPAND, 5)
+		self.middleSizer.Add(self.rightMiddleSizer, 1, wx.EXPAND| wx.ALL | wx.EXPAND, 5)
 
 		bottomSizer.Add(elementosBottomSizer, 5)
 
-		sizerPrincipal.Add(topSizer, 1, wx.ALIGN_CENTER, 5)
-		sizerPrincipal.Add(middleSizer, 5, wx.EXPAND, 5)
-		sizerPrincipal.Add(bottomSizer, 1,  wx.ALIGN_CENTER, 5)
+		self.sizerPrincipal.Add(topSizer, 1, wx.ALIGN_CENTER, 5)
+		self.sizerPrincipal.Add(self.middleSizer, 13, wx.EXPAND, 5)
+		self.sizerPrincipal.Add(bottomSizer, 1,  wx.ALIGN_CENTER, 5)
 		
 
 		self.SetMenuBar(barraDeMenu)
-		self.painel.SetSizer(sizerPrincipal)
+		self.painel.SetSizer(self.sizerPrincipal)
 		self.painel.SetAutoLayout(1)
-		sizerPrincipal.Fit(self.painel)
-		sizerPrincipal.RecalcSizes()
+		self.sizerPrincipal.Fit(self.painel)
+		self.sizerPrincipal.RecalcSizes()
 		self.Show(True)
 
 	def gerarNotebook(self):
@@ -455,14 +483,35 @@ class meuPrograma(wx.Frame):
 				codigo = respostas['codigo'],
 				enunciado=self.prova.obterQuestao(numero).obterEnunciado())
 			self.notebookGerado.AddPage(painelGenerico, "Questão %s" % (questao.obterNumeroQuestao()))
+		self.sizerPrincipal.Layout()
+		self.rightMiddleSizer.Detach(self.criteriosAtuais)
+		self.middleSizer.Detach(self.rightMiddleSizer)
 
-		self.notebookGerado.ChangeSelection(0)
+		self.criteriosAtuais.Destroy()
+		self.rightMiddleSizer.Destroy()
+
+		self.rightMiddleSizer = wx.BoxSizer(wx.HORIZONTAL)
+		self.criteriosAtuais = self.gerarTelaDeAvaliacao()
+
+		self.rightMiddleSizer.Add(self.criteriosAtuais, 1, wx.EXPAND)
+		
+		self.middleSizer.Add(self.rightMiddleSizer)
+		self.sizerPrincipal.Layout()
+
+		self.notebookGerado.SetSelection(0)
 
 
 	def abrirPastaDaProva(self, event):
 		self.pastaProjeto = wx.DirSelector()
 		if (self.pastaProjeto):
 			self.projetos = bancodedados.PastaProjetos(self.pastaProjeto)
+			if not (self.projetos.tem_permissao):
+				wx.MessageBox("Pasta não possui permissão! Escolha outra.",
+							  parent=self,
+							  style=wx.ICON_EXCLAMATION | wx.OK)
+				event.Veto()
+				return
+			
 			self.conexao = self.projetos.obterConexao()
 			self.cursor_conexao = self.projetos.obterCursor()
 
@@ -504,7 +553,7 @@ class meuPrograma(wx.Frame):
 				return child
 
 	def irParaPrimeiraQuestao(self, event):
-		self.notebookGerado.ChangeSelection(0)
+		self.notebookGerado.SetSelection(0)
 
 		self.textoQuestaoAtual.SetLabel(self.notebookGerado.GetPageText(0))
 		self.txtCtrlCodigoAtual = self.obterTextCtrl()
@@ -512,7 +561,7 @@ class meuPrograma(wx.Frame):
 	def irParaQuestaoAnterior(self, event):
 		paginaAtual = self.notebookGerado.GetSelection()
 		if (paginaAtual > 0):
-			self.notebookGerado.ChangeSelection(paginaAtual-1)
+			self.notebookGerado.SetSelection(paginaAtual-1)
 			self.textoQuestaoAtual.SetLabel(self.notebookGerado.GetPageText(paginaAtual-1))
 
 		self.txtCtrlCodigoAtual = self.obterTextCtrl()
@@ -521,7 +570,7 @@ class meuPrograma(wx.Frame):
 		paginaAtual = self.notebookGerado.GetSelection()
 		totalDePaginas = self.notebookGerado.GetPageCount()
 		if (paginaAtual < totalDePaginas-1):
-			self.notebookGerado.ChangeSelection(paginaAtual+1)
+			self.notebookGerado.SetSelection(paginaAtual+1)
 			self.textoQuestaoAtual.SetLabel(self.notebookGerado.GetPageText(paginaAtual+1))
 
 		self.txtCtrlCodigoAtual = self.obterTextCtrl()
@@ -529,7 +578,7 @@ class meuPrograma(wx.Frame):
 
 	def irParaUltimaQuestao(self, event):
 		totalDePaginas = self.notebookGerado.GetPageCount()
-		self.notebookGerado.ChangeSelection(totalDePaginas)
+		self.notebookGerado.SetSelection(totalDePaginas-1)
 		self.textoQuestaoAtual.SetLabel(self.notebookGerado.GetPageText(totalDePaginas))
 
 		self.txtCtrlCodigoAtual = self.obterTextCtrl()
@@ -538,7 +587,7 @@ class meuPrograma(wx.Frame):
 		pass
 
 	def salvarCriterios(self, event):
-		pass
+		self.sizerAvaliacao.Add(wx.Button(self.painel, id=wx.ID_OK))
 
 	def gerarElementoTopSizer(self):
 		botaoPrimeiro = wx.Button(self.painel, label='Primeira')
@@ -553,11 +602,11 @@ class meuPrograma(wx.Frame):
 		self.Bind(wx.EVT_BUTTON, self.irParaUltimaQuestao, botaoUltimo)
 
 		sizer = wx.BoxSizer(wx.HORIZONTAL)
-		sizer.Add(botaoPrimeiro, 0, wx.ALIGN_CENTER | wx.ALL | wx.EXPAND, 5)
-		sizer.Add(botaoAnterior, 0, wx.ALIGN_CENTER | wx.ALL | wx.EXPAND, 5)
-		sizer.Add(self.textoQuestaoAtual, 0, wx.ALIGN_CENTER | wx.ALL | wx.EXPAND, 5)
-		sizer.Add(botaoProximo, 0, wx.ALIGN_CENTER | wx.ALL | wx.EXPAND, 5)
-		sizer.Add(botaoUltimo, 0, wx.ALIGN_CENTER | wx.ALL | wx.EXPAND, 5)
+		sizer.Add(botaoPrimeiro, 0, wx.ALIGN_CENTER | wx.ALL | wx.EXPAND, 2)
+		sizer.Add(botaoAnterior, 0, wx.ALIGN_CENTER | wx.ALL | wx.EXPAND, 2)
+		sizer.Add(self.textoQuestaoAtual, 0, wx.ALIGN_CENTER | wx.ALL | wx.EXPAND, 2)
+		sizer.Add(botaoProximo, 0, wx.ALIGN_CENTER | wx.ALL | wx.EXPAND,2)
+		sizer.Add(botaoUltimo, 0, wx.ALIGN_CENTER | wx.ALL | wx.EXPAND, 2)
 
 		return sizer
 
@@ -585,29 +634,34 @@ class meuPrograma(wx.Frame):
 	def AoMudarValorAvaliacao(self, event):
 		self.notasCriterios[self.valores.index(event.GetId())].SetLabel(str(event.GetInt()))
 
-
-	def preencherCriterios(self):
-		avaliacaoSizer = wx.StaticBoxSizer(wx.VERTICAL, self.painel, "Avaliação")
+	def obterNomeAluno(self):
+		return self.listCtrlAlunos.GetItemText(self.listCtrlAlunos.GetFocusedItem())
+	
+	def preencherCriterios(self, parent):
+		avaliacaoSizer = wx.StaticBoxSizer(wx.VERTICAL, parent, "Avaliação")
 
 		nomePagina = self.notebookGerado.GetPageText(self.notebookGerado.GetSelection())
 		numeroQuestao = nomePagina.split()[-1]
-		criterios = self.prova.obterQuestao(numeroQuestao).obterCriterios()
+		questaoObjeto = self.prova.obterQuestao(numeroQuestao)
+		criterios = questaoObjeto.obterCriterios()
+		
+		for i, id_criterio in enumerate(criterios):
+			notaAtual = self.projetos.obterAluno( self.obterNomeAluno() ).obterNotaAluno(questaoObjeto, id_criterio)
+			nomeCriterio = questaoObjeto.obterCriterio(id_criterio).obterNomeCriterio()
 
-		for criterio in criterios:
-			nomeCriterio, notaAtual = criterio
 			linhaCriterio = wx.BoxSizer(wx.HORIZONTAL)
 			linhaValorCriterio = wx.BoxSizer(wx.HORIZONTAL)
 			
-			staticCriterio = wx.StaticText(self.painel, label="Criterio %s:" % (i+1))
-			criterioTextCtrl = wx.TextCtrl(self.painel, value=nomes[i], size=(200, -1))
+			staticCriterio = wx.StaticText(avaliacaoSizer.GetStaticBox(), label="Criterio %s:" % (i+1))
+			criterioTextCtrl = wx.TextCtrl(avaliacaoSizer.GetStaticBox(), value=nomeCriterio, size=(200, -1))
 			criterioTextCtrl.Disable()
 
-			staticValor = wx.StaticText(self.painel, label="Nota:")
-			valor = wx.Slider(self.painel, style=wx.SL_AUTOTICKS, minValue=0, maxValue=10)
+			staticValor = wx.StaticText(avaliacaoSizer.GetStaticBox(), label="Nota:")
+			valor = wx.Slider(avaliacaoSizer.GetStaticBox(), style=wx.SL_AUTOTICKS, minValue=0, maxValue=10)
 			self.valores.append(valor.GetId())
-			salvarValorbtn = wx.Button(self.painel, label="S", style=wx.BU_EXACTFIT)
+			salvarValorbtn = wx.Button(avaliacaoSizer.GetStaticBox(), label="S", style=wx.BU_EXACTFIT)
 
-			texto = wx.StaticText(self.painel, label=str(valor.GetValue()))
+			texto = wx.StaticText(avaliacaoSizer.GetStaticBox(), label=str(valor.GetValue()))
 			self.notasCriterios.append(texto)
 			self.Bind(wx.EVT_SLIDER, self.AoMudarValorAvaliacao, id=valor.GetId())
 
@@ -623,17 +677,9 @@ class meuPrograma(wx.Frame):
 			avaliacaoSizer.Add(linhaValorCriterio, 0, wx.ALL | wx.EXPAND, 1)
 		return avaliacaoSizer
 
-	def zerarItensDoSizerAvaliacao(self):
-		for SizerItem in range(self.sizerAvaliacao.GetItemCount()-1):
-			self.sizerAvaliacao.Remove(SizerItem)
-
-
 	def preencherSizerAvaliacao(self):
-		self.zerarItensDoSizerAvaliacao()
-
 		linhaNome = wx.BoxSizer(wx.HORIZONTAL)
 		linhaMatricula = wx.BoxSizer(wx.HORIZONTAL)
-
 		
 		elementoFocado = self.listCtrlAlunos.GetFocusedItem()
 		if (elementoFocado != -1):
@@ -671,7 +717,7 @@ class meuPrograma(wx.Frame):
 		linhaMatricula.Add(staticMatricula, 0, wx.ALL | wx.EXPAND, 1)
 		linhaMatricula.Add(self.matricula, 0, wx.ALL | wx.EXPAND, 1)
 
-		avaliacaoSizer.Add(salvarCriteriosbtn, 0, wx.ALL | wx.EXPAND, 1)
+		avaliacaoSizer.Add(salvarCriteriosbtn, 1, wx.ALL | wx.EXPAND, 1)
 		avaliacaoSizer.Add(self.notaTotal, 0, wx.ALL | wx.EXPAND, 1)
 
 		self.sizerAvaliacao.Add(linhaNome, 0, wx.ALL | wx.EXPAND, 1)
@@ -681,16 +727,66 @@ class meuPrograma(wx.Frame):
 		return linhaNome
 
 
-	def gerarTelaDeAvaliacao(self):
-		self.sizerAvaliacao = wx.BoxSizer(wx.VERTICAL)
-		self.preencherSizerAvaliacao()
-		return self.sizerAvaliacao
-		
+	def gerarTelaDeAvaliacao(self, doDuploClique=False):
+		painelTemp = wx.Panel(self.painel, size=(300,-1))
 
+		sizer = wx.BoxSizer(wx.VERTICAL)
+		linhaNome = wx.BoxSizer(wx.HORIZONTAL)
+		linhaMatricula = wx.BoxSizer(wx.HORIZONTAL)
+		
+		avaliacaoSizer = wx.StaticBoxSizer(wx.VERTICAL, painelTemp, "Avaliação")
+		
+		elementoFocado = self.listCtrlAlunos.GetFocusedItem()
+		if (elementoFocado != -1):
+			nomeAluno = self.listCtrlAlunos.GetItemText(elementoFocado)
+		else:
+			nomeAluno = '<vazio>'
+		
+		if (doDuploClique):
+			alunoObjeto = self.projetos.obterAluno(nomeAluno)
+			matriculaAluno = alunoObjeto.obterMatricula()
+		else:
+			matriculaAluno = "<vazio>"
+		
+		staticNome = wx.StaticText(painelTemp, label="Nome:")
+		font = wx.Font(9, wx.DEFAULT, wx.NORMAL, wx.BOLD)
+		staticNome.SetFont(font)
+		self.nomeAluno = wx.StaticText(painelTemp, label=nomeAluno)
+
+		staticMatricula = wx.StaticText(painelTemp, label="Matrícula:")
+		staticMatricula.SetFont(font)
+		self.matricula = wx.StaticText(painelTemp, label=matriculaAluno)
+
+		if doDuploClique:
+			avaliacaoSizer = self.preencherCriterios(painelTemp)
+		else:
+			avaliacaoSizer = wx.BoxSizer(wx.HORIZONTAL)
+
+		salvarCriteriosbtn = wx.Button(painelTemp, label="SALVAR")
+		self.notaTotal = wx.StaticText(painelTemp, label="TOTAL: 20")
+
+		linhaNome.Add(staticNome, 0, wx.ALL | wx.EXPAND, 1)
+		linhaNome.Add(self.nomeAluno, 0, wx.ALL | wx.EXPAND, 1)
+
+		linhaMatricula.Add(staticMatricula, 0, wx.ALL | wx.EXPAND, 1)
+		linhaMatricula.Add(self.matricula, 0, wx.ALL | wx.EXPAND, 1)
+
+		avaliacaoSizer.Add(salvarCriteriosbtn, 1, wx.ALL | wx.EXPAND, 1)
+		avaliacaoSizer.Add(self.notaTotal, 0, wx.ALL | wx.EXPAND, 1)
+
+		sizer.Add(linhaNome, 0, wx.ALL | wx.EXPAND, 1)
+		sizer.Add(linhaMatricula, 0, wx.ALL | wx.EXPAND, 1)
+		sizer.Add(avaliacaoSizer, 0, wx.ALL | wx.EXPAND, 1)
+
+		painelTemp.SetSizer(sizer)
+
+		return painelTemp
+		
 	def criarControles(self):
 		sizer = wx.BoxSizer(wx.HORIZONTAL)
 		sizer.AddSpacer(8)
 
+		self.botaoSalvar = wx.Button(self.painel, label="Salvar")
 		self.botaoCompilar = wx.Button(self.painel, label="Compilar")
 		self.botaoPlay = wx.Button(self.painel, label="Rodar código")
 		self.botaoPause = wx.Button(self.painel, label="Parar")
@@ -699,25 +795,56 @@ class meuPrograma(wx.Frame):
 		sizer.Add(self.botaoPlay, 0, wx.RIGHT | wx.ALIGN_RIGHT, 2)
 		sizer.Add(self.botaoPause, 0, wx.LEFT | wx.ALIGN_RIGHT, 2)
 
+		self.Bind(wx.EVT_BUTTON, self.salvarCodigo, self.botaoSalvar)
 		self.Bind(wx.EVT_BUTTON, self.compilarCodigo, self.botaoCompilar)
 		self.Bind(wx.EVT_BUTTON, self.darPlayNoCodigo, self.botaoPlay)
 		self.Bind(wx.EVT_BUTTON, self.pausarCodigo, self.botaoPause)
 		return sizer
 
-	def compilarCodigo(self, event):
-		if (config.Configuracoes.caminhoCompilador == ':visualg:'):
-			pastaTemp = tempfile.gettempdir()
-		else:
+	def salvarCodigo(self, event=None, nomeArquivo=False):
+		if not (nomeArquivo):
 			nomePagina = self.notebookGerado.GetPageText(self.notebookGerado.GetSelection())
 			numeroQuestao = nomePagina.split()[-1]
 
 			caminhoArquivo = self.projetos.obterPastaAluno(self.alunoAtual, numeroQuestao)
 			nomeArquivo = str(caminhoArquivo)
-			
-			os.chdir(config.Configuracoes.caminhoCompilador.parent)
-			print([config.Configuracoes.caminhoCompilador.parts[-1], nomeArquivo, '-o', str(nomeArquivo)+'.exe'])
-			subprocess.call([config.Configuracoes.caminhoCompilador.parts[-1], nomeArquivo, '-o', str(nomeArquivo)+'.exe'])
-			os.chdir(WindowsPath(__file__).parent)
+
+		with open(nomeArquivo, 'w') as arquivoDoCodigo:
+			conteudoTextCtrl = self.txtCtrlCodigoAtual.GetValue()
+			arquivoDoCodigo.write(conteudoTextCtrl)
+
+		self.arquivoFoiSalvo = True
+
+	def atualizarCompilacao(self, widget, valor=5):
+		if valor>100: widget.Destroy(); return
+		widget.Update(valor)
+		wx.CallLater(10, self.atualizarCompilacao, widget, valor+5)
+
+	
+	def compilarCodigo(self, event):
+
+		def innerCompilar(windowCompilando):
+			if (config.Configuracoes.caminhoCompilador == ':visualg:'):
+				pastaTemp = tempfile.gettempdir()
+			else:
+				nomePagina = self.notebookGerado.GetPageText(self.notebookGerado.GetSelection())
+				numeroQuestao = nomePagina.split()[-1]
+
+				caminhoArquivo = self.projetos.obterPastaAluno(self.alunoAtual, numeroQuestao)
+				nomeArquivo = str(caminhoArquivo)
+				
+				os.chdir(config.Configuracoes.caminhoCompilador.parent)
+				print([config.Configuracoes.caminhoCompilador.parts[-1], nomeArquivo, '-o', str(nomeArquivo)+'.exe'])
+				subprocess.call([config.Configuracoes.caminhoCompilador.parts[-1], nomeArquivo, '-o', str(nomeArquivo)+'.exe'])
+				os.chdir(WindowsPath(__file__).parent)
+
+			windowCompilando.Destroy()
+
+		windowCompilando = DialogoCompilacao(self)
+		#self.atualizarCompilacao(windowCompilando)
+		compilacao = threading.Thread(target=innerCompilar, args=(windowCompilando,))
+		compilacao.start()
+
 
 	def darPlayNoCodigo(self, event):
 		os.chdir(WindowsPath(__file__).parent)
@@ -752,12 +879,30 @@ class meuPrograma(wx.Frame):
 	
 
 	def duploCliqueEmItem(self, event):
-		item = event.GetItem()
+		self.rightMiddleSizer.Detach(self.criteriosAtuais)
+		self.criteriosAtuais.Destroy()
 
+		self.middleSizer.Detach(self.rightMiddleSizer)
+		self.rightMiddleSizer.Destroy()
+
+		self.rightMiddleSizer = wx.BoxSizer(wx.VERTICAL)
+
+		self.criteriosAtuais = self.gerarTelaDeAvaliacao(True)
+		self.rightMiddleSizer.Add(self.criteriosAtuais, 1, wx.EXPAND)
+		self.rightMiddleSizer.Layout()
+
+		self.middleSizer.Add(self.rightMiddleSizer, 4, wx.EXPAND | wx.ALL, 10)
+		self.middleSizer.Layout()
+		
+		self.Layout()
+		self.Refresh()
+		self.Update()
+		
+		item = event.GetItem()
 		nomeAluno = self.listCtrlAlunos.GetItemText(item.GetId()).split('_')[0]
 		self.carregarQuestoesDoAluno(nomeAluno)
 		self.mudarDadosDoAluno(nomeAluno)
-		self.preencherSizerAvaliacao()
+
 
 	def atualizarParaQuestao(self, nomeArquivo):
 		self.txtCtrlCodigoAtual.LoadFile(nomeArquivo)
