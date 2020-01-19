@@ -300,6 +300,7 @@ class DialogoCriacaoProva(wx.Dialog):
 class painelGenericoQuestao(wx.Panel):
 	def __init__(self, parent, enunciado, valor, codigo, *args, **kwargs):
 		wx.Panel.__init__(self, parent)
+		self.foiEditado = False
 
 		self.mudarCor()
 		sizer = wx.BoxSizer(wx.VERTICAL)
@@ -312,9 +313,14 @@ class painelGenericoQuestao(wx.Panel):
 		self.txtCtrlCodigo.AppendText(codigo)
 		#self.txtCtrlCodigo.SetBackgroundColour(wx.Colour(0, 0, 0))
 
+		self.txtCtrlCodigo.Bind(wx.EVT_TEXT, self.setarComoEditado)
+
 		sizer.Add(staticEnunciado, 1, wx.ALL | wx.EXPAND, 10)
 		sizer.Add(self.txtCtrlCodigo, 7, wx.ALL | wx.EXPAND, 10)
 		self.SetSizer(sizer)
+
+	def setarComoEditado(self, event):
+		self.foiEditado = True
 
 	def mudarCor(self):
 		self.SetBackgroundColour(wx.Colour(120, 120, 120))
@@ -389,6 +395,8 @@ class meuPrograma(wx.Frame):
 
 	def gerarNotebook(self):
 		notebook = wx.Notebook(self.painel)
+		notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.aoMudarPaginaNotebook)
+		notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGING, self.cancelarMudancaPagina)
 		notebook.DeleteAllPages()
 		return notebook
 
@@ -483,6 +491,7 @@ class meuPrograma(wx.Frame):
 				codigo = respostas['codigo'],
 				enunciado=self.prova.obterQuestao(numero).obterEnunciado())
 			self.notebookGerado.AddPage(painelGenerico, "Questão %s" % (questao.obterNumeroQuestao()))
+		
 		self.sizerPrincipal.Layout()
 		self.rightMiddleSizer.Detach(self.criteriosAtuais)
 		self.middleSizer.Detach(self.rightMiddleSizer)
@@ -546,42 +555,63 @@ class meuPrograma(wx.Frame):
 		nomeAluno = self.listCtrlAlunos.GetItemText(self.listCtrlAlunos.GetItem(0).GetId()).split('_')[0]
 		self.carregarQuestoesDoAluno(nomeAluno)
 
-	def obterTextCtrl(self):
-		paginaAtual = self.notebookGerado.GetCurrentPage()
+	def obterTextCtrl(self, event): # Chamado pelo aoMudarPaginaNotebook, nao eh evento
+		paginaAtual = self.notebookGerado.GetPage(event.GetSelection())
+		return paginaAtual.txtCtrlCodigo
 		for child in paginaAtual.GetChildren():
 			if isinstance(child, wx.TextCtrl):
 				return child
 
+	def cancelarMudancaPagina(self, event=None):
+		painelGenerico = self.notebookGerado.GetCurrentPage()
+
+		if (painelGenerico.foiEditado and self.notebookGerado.GetSelection() != 0):
+			dialogo = wx.MessageDialog(self,
+							 message="Arquivo foi editado, deseja mudar mesmo assim?",
+							 style=wx.YES_NO|wx.NO_DEFAULT|wx.ICON_QUESTION)
+
+			respostaDialogo = dialogo.ShowModal()
+			if (respostaDialogo == wx.ID_NO):
+				event.Skip()
+				return True
+		return False
+
+	def aoMudarPaginaNotebook(self, event):
+		self.txtCtrlCodigoAtual = self.obterTextCtrl(event)
+
 	def irParaPrimeiraQuestao(self, event):
+		if self.cancelarMudancaPagina(): event.Skip(); return
+
+		print(self.notebookGerado.GetCurrentPage())
 		self.notebookGerado.SetSelection(0)
+		print(self.notebookGerado.GetCurrentPage())
 
 		self.textoQuestaoAtual.SetLabel(self.notebookGerado.GetPageText(0))
-		self.txtCtrlCodigoAtual = self.obterTextCtrl()
 
 	def irParaQuestaoAnterior(self, event):
+		if self.cancelarMudancaPagina(): event.Skip(); return
+
 		paginaAtual = self.notebookGerado.GetSelection()
 		if (paginaAtual > 0):
 			self.notebookGerado.SetSelection(paginaAtual-1)
 			self.textoQuestaoAtual.SetLabel(self.notebookGerado.GetPageText(paginaAtual-1))
 
-		self.txtCtrlCodigoAtual = self.obterTextCtrl()
-
 	def irParaProximaQuestao(self, event):
+		if self.cancelarMudancaPagina(): event.Skip(); return
+
 		paginaAtual = self.notebookGerado.GetSelection()
 		totalDePaginas = self.notebookGerado.GetPageCount()
 		if (paginaAtual < totalDePaginas-1):
 			self.notebookGerado.SetSelection(paginaAtual+1)
 			self.textoQuestaoAtual.SetLabel(self.notebookGerado.GetPageText(paginaAtual+1))
 
-		self.txtCtrlCodigoAtual = self.obterTextCtrl()
-
 
 	def irParaUltimaQuestao(self, event):
+		if self.cancelarMudancaPagina(): event.Skip(); return
+
 		totalDePaginas = self.notebookGerado.GetPageCount()
 		self.notebookGerado.SetSelection(totalDePaginas-1)
 		self.textoQuestaoAtual.SetLabel(self.notebookGerado.GetPageText(totalDePaginas))
-
-		self.txtCtrlCodigoAtual = self.obterTextCtrl()
 
 	def salvarCriterio(self, event):
 		pass
@@ -791,8 +821,9 @@ class meuPrograma(wx.Frame):
 		self.botaoPlay = wx.Button(self.painel, label="Rodar código")
 		self.botaoPause = wx.Button(self.painel, label="Parar")
 
-		sizer.Add(self.botaoCompilar, 0, wx.RIGHT | wx.ALIGN_RIGHT, 4)
-		sizer.Add(self.botaoPlay, 0, wx.RIGHT | wx.ALIGN_RIGHT, 2)
+		sizer.Add(self.botaoSalvar, 0, wx.RIGHT | wx.ALIGN_RIGHT, 2)
+		sizer.Add(self.botaoCompilar, 0, wx.RIGHT | wx.LEFT | wx.ALIGN_RIGHT, 2)
+		sizer.Add(self.botaoPlay, 0, wx.RIGHT | wx.LEFT | wx.ALIGN_RIGHT, 2)
 		sizer.Add(self.botaoPause, 0, wx.LEFT | wx.ALIGN_RIGHT, 2)
 
 		self.Bind(wx.EVT_BUTTON, self.salvarCodigo, self.botaoSalvar)
@@ -813,7 +844,7 @@ class meuPrograma(wx.Frame):
 			conteudoTextCtrl = self.txtCtrlCodigoAtual.GetValue()
 			arquivoDoCodigo.write(conteudoTextCtrl)
 
-		self.arquivoFoiSalvo = True
+		self.foiEditado = False
 
 	def atualizarCompilacao(self, widget, valor=5):
 		if valor>100: widget.Destroy(); return
