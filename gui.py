@@ -554,13 +554,14 @@ class meuPrograma(wx.Frame):
 		self.preencherListCtrl(self.projetos.listarProjetos())
 		nomeAluno = self.listCtrlAlunos.GetItemText(self.listCtrlAlunos.GetItem(0).GetId()).split('_')[0]
 		self.carregarQuestoesDoAluno(nomeAluno)
+		self.listCtrlAlunos.Select(0)
+		self.listCtrlAlunos.Focus(0)
+		self.notebookGerado.SetSelection(1)
+		self.notebookGerado.SetSelection(0)
 
 	def obterTextCtrl(self, event): # Chamado pelo aoMudarPaginaNotebook, nao eh evento
 		paginaAtual = self.notebookGerado.GetPage(event.GetSelection())
 		return paginaAtual.txtCtrlCodigo
-		for child in paginaAtual.GetChildren():
-			if isinstance(child, wx.TextCtrl):
-				return child
 
 	def cancelarMudancaPagina(self, event=None):
 		painelGenerico = self.notebookGerado.GetCurrentPage()
@@ -668,6 +669,7 @@ class meuPrograma(wx.Frame):
 		return self.listCtrlAlunos.GetItemText(self.listCtrlAlunos.GetFocusedItem())
 	
 	def preencherCriterios(self, parent):
+		print("KKKKKKKK fui chamado de filho da puta kkk")
 		avaliacaoSizer = wx.StaticBoxSizer(wx.VERTICAL, parent, "Avaliação")
 
 		nomePagina = self.notebookGerado.GetPageText(self.notebookGerado.GetSelection())
@@ -675,9 +677,11 @@ class meuPrograma(wx.Frame):
 		questaoObjeto = self.prova.obterQuestao(numeroQuestao)
 		criterios = questaoObjeto.obterCriterios()
 		
-		for i, id_criterio in enumerate(criterios):
-			notaAtual = self.projetos.obterAluno( self.obterNomeAluno() ).obterNotaAluno(questaoObjeto, id_criterio)
-			nomeCriterio = questaoObjeto.obterCriterio(id_criterio).obterNomeCriterio()
+		itensCriterios = list(criterios.items())
+		for idCriterio, criterio in itensCriterios:#enumerate(criterios):
+			i = itensCriterios.index((idCriterio, criterio))
+			notaAtual = self.projetos.obterAluno( self.obterNomeAluno() ).obterNotaAluno(questaoObjeto, criterio)
+			nomeCriterio = criterio.obterNomeCriterio()
 
 			linhaCriterio = wx.BoxSizer(wx.HORIZONTAL)
 			linhaValorCriterio = wx.BoxSizer(wx.HORIZONTAL)
@@ -707,55 +711,6 @@ class meuPrograma(wx.Frame):
 			avaliacaoSizer.Add(linhaValorCriterio, 0, wx.ALL | wx.EXPAND, 1)
 		return avaliacaoSizer
 
-	def preencherSizerAvaliacao(self):
-		linhaNome = wx.BoxSizer(wx.HORIZONTAL)
-		linhaMatricula = wx.BoxSizer(wx.HORIZONTAL)
-		
-		elementoFocado = self.listCtrlAlunos.GetFocusedItem()
-		if (elementoFocado != -1):
-			nomeAluno = self.listCtrlAlunos.GetItemText(elementoFocado)
-		else:
-			nomeAluno = '<vazio>'
-		
-		if (self.projetos):
-			alunoObjeto = self.projetos.obterAluno(nomeAluno)
-			matriculaAluno = alunoObjeto.obterMatricula()
-		else:
-			matriculaAluno = "<vazio>"
-		
-		staticNome = wx.StaticText(self.painel, label="Nome:")
-		font = wx.Font(9, wx.DEFAULT, wx.NORMAL, wx.BOLD)
-		staticNome.SetFont(font)
-		self.nomeAluno = wx.StaticText(self.painel, label=nomeAluno)
-
-		staticMatricula = wx.StaticText(self.painel, label="Matrícula:")
-		staticMatricula.SetFont(font)
-		self.matricula = wx.StaticText(self.painel, label=matriculaAluno)
-
-
-		if self.projetos:
-			avaliacaoSizer = self.preencherCriterios()
-		else:
-			avaliacaoSizer = wx.BoxSizer(wx.HORIZONTAL)
-
-		salvarCriteriosbtn = wx.Button(self.painel, label="SALVAR")
-		self.notaTotal = wx.StaticText(self.painel, label="TOTAL: 20")
-
-		linhaNome.Add(staticNome, 0, wx.ALL | wx.EXPAND, 1)
-		linhaNome.Add(self.nomeAluno, 0, wx.ALL | wx.EXPAND, 1)
-
-		linhaMatricula.Add(staticMatricula, 0, wx.ALL | wx.EXPAND, 1)
-		linhaMatricula.Add(self.matricula, 0, wx.ALL | wx.EXPAND, 1)
-
-		avaliacaoSizer.Add(salvarCriteriosbtn, 1, wx.ALL | wx.EXPAND, 1)
-		avaliacaoSizer.Add(self.notaTotal, 0, wx.ALL | wx.EXPAND, 1)
-
-		self.sizerAvaliacao.Add(linhaNome, 0, wx.ALL | wx.EXPAND, 1)
-		self.sizerAvaliacao.Add(linhaMatricula, 0, wx.ALL | wx.EXPAND, 1)
-		self.sizerAvaliacao.Add(avaliacaoSizer, 0, wx.ALL | wx.EXPAND, 1)
-
-		return linhaNome
-
 
 	def gerarTelaDeAvaliacao(self, doDuploClique=False):
 		painelTemp = wx.Panel(self.painel, size=(300,-1))
@@ -774,6 +729,7 @@ class meuPrograma(wx.Frame):
 		
 		if (doDuploClique):
 			alunoObjeto = self.projetos.obterAluno(nomeAluno)
+			print(nomeAluno)
 			matriculaAluno = alunoObjeto.obterMatricula()
 		else:
 			matriculaAluno = "<vazio>"
@@ -873,6 +829,7 @@ class meuPrograma(wx.Frame):
 
 		windowCompilando = DialogoCompilacao(self)
 		#self.atualizarCompilacao(windowCompilando)
+		#EVT_NOTEBOOK_PAGE_CHANGING
 		compilacao = threading.Thread(target=innerCompilar, args=(windowCompilando,))
 		compilacao.start()
 
@@ -891,17 +848,16 @@ class meuPrograma(wx.Frame):
 		if (nomeArquivo_ in os.listdir(Path(self.pastaProjeto).parent)):
 			os.remove(nomeArquivo+'.exe')
 		
-		print(' '.join(['start', 'python', 'executar_e_perguntar.py', nomeArquivo_+'.exe']))
 		subprocess.Popen(['start', 'python', 'executar_e_perguntar.py', nomeArquivo_+'.exe'], shell=True)
 
 	def pausarCodigo(self, event):
 		pass
 	
 	def preencherListCtrl(self, pastas=[]):
-		print(pastas)
 		for pasta in range(len(pastas)):
-			print(pasta, pastas[pasta])
 			self.listCtrlAlunos.InsertItem(pasta, pastas[pasta])
+
+		self.listCtrlAlunos.Select(0)
 	
 	
 	def mudarDadosDoAluno(self, nomeAluno):
@@ -929,10 +885,12 @@ class meuPrograma(wx.Frame):
 		self.Refresh()
 		self.Update()
 		
-		item = event.GetItem()
+		if event: item = event.GetItem()
+		else: item = self.listCtrlAlunos.GetItem(self.listCtrlAlunos.GetFocusedItem())
 		nomeAluno = self.listCtrlAlunos.GetItemText(item.GetId()).split('_')[0]
 		self.carregarQuestoesDoAluno(nomeAluno)
 		self.mudarDadosDoAluno(nomeAluno)
+		self.notebookGerado.SetSelection(0)
 
 
 	def atualizarParaQuestao(self, nomeArquivo):
