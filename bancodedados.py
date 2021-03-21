@@ -342,9 +342,10 @@ class Criterio(BD_CRUD):
         return hash((self.questao, self.id_criterio, self.nome_criterio, self.peso_criterio))
 
     def __eq__(self, outro):
+        dados_self = (self.questao, self.id_criterio, self.nome_criterio, self.peso_criterio)
+        dados_outro = (outro.questao, outro.id_criterio, outro.nome_criterio, outro.peso_criterio)
+        
         if isinstance(outro, Criterio) and dados_self == dados_outro:
-            dados_self = (self.questao, self.id_criterio, self.nome_criterio, self.peso_criterio)
-            dados_outro = (outro.questao, outro.id_criterio, outro.nome_criterio, outro.peso_criterio)
             return True
         else:
             return False
@@ -501,7 +502,7 @@ class Aluno(BD_CRUD):
         else:
             return self.respostas[questao]
 
-    def cadastrarResposta(self, criterio=False, questao=False, codigo=False):
+    def cadastrarResposta(self, questao=False, criterio=False, codigo=False):
         resp = Resposta(criterio, questao, self, conexao=self.conexao, cursor_conexao=self.cursor_conexao)
         resp.cadastrarRespostaEmBranco()
 
